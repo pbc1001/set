@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "outputDirectory": "build/web",
+  "rewrites": [{ "source": "/(create|join|lobby|play)", "destination": "/index.html" }]
+}

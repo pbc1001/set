@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "set-lab-api",
+  "main": "cloudflare/index.ts",
+  "compatibility_date": "2026-11-20",
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": {
+    "WEB_ORIGINS": "https://set-lab.vercel.app,https://set-lab-yeon8.vercel.app,http://localhost:5173,http://127.0.0.1:5173"
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }]
+}

@@ -1,0 +1,115 @@
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { DECK_SIZE, INITIAL_SIZE, keyAt, type RoomState } from '../shared/game';
+import { CardArt, describeCard } from './CardArt';
+
+export type Play = NonNullable<RoomState['play']>;
+
+interface Props {
+  play: Play;
+  version: number;
+  pending: boolean;
+  message: string;
+  claim: (positions: number[]) => void;
+}
+
+export function GameBoard({ play, version, pending, message, claim }: Props) {
+  const [display, setDisplay] = useState(play);
+  const [selected, setSelected] = useState<number[]>([]);
+  const [burst, setBurst] = useState<number[]>([]);
+  const [celebrating, setCelebrating] = useState(false);
+  const lastVersion = useRef(version);
+
+  useLayoutEffect(() => {
+    if (lastVersion.current === version) return;
+    const positions = version === lastVersion.current + 1 ? play.event.positions : undefined;
+    lastVersion.current = version;
+    setSelected([]);
+    setBurst([]);
+    setCelebrating(!!positions?.length);
+    if (!positions?.length) {
+      setDisplay(play);
+      return;
+    }
+
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) setDisplay(play);
+    else setBurst(positions);
+    const replacement = window.setTimeout(() => {
+      setDisplay(play);
+      setBurst([]);
+    }, 485);
+    const end = window.setTimeout(() => setCelebrating(false), 790);
+    return () => { window.clearTimeout(replacement); window.clearTimeout(end); };
+  }, [play, version]);
+
+  const locked = pending || burst.length > 0 || display.finished;
+  const columns = 4 + Math.max(0, (display.slots.length - INITIAL_SIZE) / 3);
+  const positions = Array.from({ length: columns * 3 }, (_, index) => {
+    const row = Math.floor(index / columns);
+    const column = index % columns;
+    return column < 4 ? row * 4 + column : INITIAL_SIZE + (column - 4) * 3 + row;
+  });
+
+  function choose(position: number) {
+    if (locked || !display.slots[position]) return;
+    const next = selected.includes(position) ? selected.filter(slot => slot !== position) : [...selected, position];
+    if (next.length === 3) {
+      setSelected([]);
+      claim(next);
+    } else setSelected(next);
+  }
+
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.target instanceof HTMLInputElement) return;
+      if (event.key === 'Escape') {
+        setSelected([]);
+        return;
+      }
+      const key = /^Key[A-Z]$/.test(event.code) ? event.code.slice(3) : event.key.toUpperCase();
+      const position = display.slots.findIndex((card, slot) => card && keyAt(slot) === key);
+      if (position >= 0) {
+        event.preventDefault();
+        choose(position);
+      }
+    };
+    document.addEventListener('keydown', shortcut);
+    return () => document.removeEventListener('keydown', shortcut);
+  });
+
+  return <section className="table" aria-labelledby="board-title">
+    <div className="table-bar">
+      <h2 id="board-title">게임 보드</h2>
+      <span className="selection" aria-label={`선택한 카드 ${selected.length}장`}>
+        {Array.from({ length: 3 }, (_, index) => <i key={index} data-filled={index < selected.length} />)}
+        {selected.length} / 3
+      </span>
+    </div>
+    <div className="board-area">
+      <div className="board" role="group" aria-label="카드" style={{ '--columns': columns } as CSSProperties}>
+        {positions.map((position, index) => {
+          const card = display.slots[position];
+          if (!card) return <div key={position} aria-hidden="true" />;
+          const key = keyAt(position);
+          const order = burst.indexOf(position);
+          return <button key={card.id} type="button" className="playing-card" data-extra={position >= INITIAL_SIZE}
+            data-burst={order >= 0} aria-keyshortcuts={key} aria-pressed={selected.includes(position)}
+            aria-disabled={locked} aria-label={`${key}, ${describeCard(card)}`} onClick={() => choose(position)}
+            style={{ '--delay': `${order * 45}ms`, gridColumn: index % columns + 1, gridRow: Math.floor(index / columns) + 1 } as CSSProperties}>
+            <kbd aria-hidden="true">{key}</kbd><CardArt card={card} />
+          </button>;
+        })}
+        {display.slots.every(card => card === null) && <p className="finished">모든 카드를 SET으로 찾았어요!</p>}
+      </div>
+      {celebrating && <div className="celebration" aria-hidden="true"><strong>SET!</strong>{Array.from({ length: 6 }, (_, index) => <i key={index} />)}</div>}
+    </div>
+    <div className="table-bar table-foot">
+      <p role="status">{selected.length ? `카드 ${3 - selected.length}장을 더 선택하세요.` : message}</p>
+      <button type="button" className="text-button" disabled={!selected.length} onClick={() => setSelected([])}><kbd>ESC</kbd> 선택 해제</button>
+    </div>
+  </section>;
+}
+
+export function DeckMeter({ remaining }: { remaining: number }) {
+  return <div className="deck-meter" aria-hidden="true"><span style={{ width: `${100 * remaining / (DECK_SIZE - INITIAL_SIZE)}%` }} /></div>;
+}
