@@ -90,10 +90,10 @@ export const styles = css`
   .connection[data-online='true'] { color: var(--accent); border-color: #416762; background: #223936; }
   .connection[data-online='true']::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 
-  .play-intro { padding: 26px 0 19px; }
-  .play-intro h1 { font-size: clamp(2rem, 4.3vw, 3.5rem); letter-spacing: -.07em; }
+  .play-intro { padding: 18px 0 14px; }
+  .play-intro h1 { font-size: clamp(1.75rem, 3.2vw, 2.75rem); letter-spacing: -.07em; }
   .play-intro p { color: var(--muted); margin-top: 6px; }
-  .play-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(244px, 285px); gap: clamp(12px, 2vw, 20px); padding-bottom: 32px; align-items: start; }
+  .play-layout { display: grid; grid-template-columns: minmax(0, max-content) minmax(220px, 260px); justify-content: start; gap: clamp(12px, 2vw, 20px); padding-bottom: 32px; align-items: start; }
   .table { min-width: 0; background: radial-gradient(#a4eed31c 1px, transparent 1px), linear-gradient(143deg, #20333b, #16232c 75%); background-size: 14px 14px, auto; border: 1px solid #38505b; border-radius: 18px; padding: clamp(8px, 1.5vw, 15px); box-shadow: 0 16px 38px #080c1050; }
   .table-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 1px 2px 9px; }
   .table-foot { min-height: 39px; font-size: .875rem; margin: 9px 2px 0; color: var(--muted); }
@@ -102,15 +102,15 @@ export const styles = css`
   .selection i { width: 6px; height: 6px; border: 1px solid #93abae; border-radius: 50%; }
   .selection i[data-filled='true'] { border-color: var(--accent); background: var(--accent); }
   .board-area { position: relative; }
-  .board { display: grid; grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); gap: clamp(5px, .8vw, 10px); }
-  .playing-card { --card-height: clamp(90px, 11vw, 131px); position: relative; display: grid; place-items: center; min-width: 0; height: var(--card-height); padding: 14px 4px 3px; border: 1px solid #fcfaf0; border-radius: 9px; background: linear-gradient(142deg, #fffdf5, var(--card)); color: #263b40; box-shadow: 0 3px 0 #95a2a1; touch-action: manipulation; }
+  .board { --card-width: clamp(96px, calc((100svh - 292px) * .238), 182px); display: grid; grid-template-columns: repeat(var(--columns), minmax(0, var(--card-width))); justify-content: center; gap: clamp(6px, .85vw, 12px); }
+  .playing-card { position: relative; display: block; min-width: 0; width: 100%; aspect-ratio: 5 / 7; padding: 0; border: 1px solid #fcfaf0; border-radius: clamp(6px, 1vw, 12px); background: linear-gradient(142deg, #fffdf5, var(--card)); color: #263b40; box-shadow: 0 3px 0 #95a2a1; touch-action: manipulation; }
   @media (hover: hover) { .playing-card[aria-pressed='false'][aria-disabled='false']:hover { background: #e7f7ee; } }
   .playing-card[data-extra='true'] { border-color: #e4bb78; box-shadow: 0 3px 0 #a78350; }
   .playing-card[aria-pressed='true'] { border-color: #7fc9ad; background: #d2f1e2; box-shadow: inset 0 0 0 2px #437d6b, 0 3px 0 #669283; }
-  .playing-card kbd { position: absolute; top: 6px; left: 6px; min-width: 20px; padding: 2px 4px; border-radius: 4px; background: #dfe8e3; color: #314b49; }
+  .playing-card kbd { position: absolute; z-index: 1; top: 7px; left: 7px; min-width: 20px; padding: 2px 4px; border-radius: 4px; background: #dfe8e3; color: #314b49; }
   .playing-card[data-extra='true'] kbd { background: #f0dfbd; color: #62431e; }
   .playing-card[aria-pressed='true'] kbd { background: #246451; color: #fff; }
-  .playing-card canvas { display: block; width: auto; height: min(99px, calc(var(--card-height) - 20px)); max-width: 100%; object-fit: contain; }
+  .playing-card canvas { position: absolute; top: 54%; left: 50%; transform: translate(-50%, -50%); display: block; width: 96%; height: auto; max-height: 86%; object-fit: contain; }
   .text-button { border: 0; padding: 7px 0; background: transparent; color: var(--ink); white-space: nowrap; }
   .text-button:disabled { opacity: .65; }
   .text-button kbd, .side-panel kbd { padding: 2px 4px; border: 1px solid currentColor; border-radius: 4px; }
@@ -157,9 +157,8 @@ export const styles = css`
     .hero-spark { font-size: 1.7rem; }
     .play-intro { padding: 17px 0 14px; }
     .table { border-radius: 12px; }
-    .board { grid-template-columns: repeat(var(--columns), minmax(44px, 1fr)); gap: 5px; overflow-x: auto; padding: 3px 2px 4px; }
-    .playing-card { --card-height: clamp(77px, 21vw, 105px); border-radius: 6px; }
-    .playing-card kbd { top: 3px; left: 3px; min-width: 16px; }
+    .board { grid-template-columns: repeat(var(--columns), minmax(44px, 1fr)); justify-content: safe center; gap: 5px; overflow-x: auto; padding: 3px 2px 4px; }
+    .playing-card kbd { top: 3px; left: 3px; min-width: 16px; padding: 1px 3px; font-size: .75rem; }
     .playing-card:focus-visible { outline-offset: -2px; }
     .table-foot { flex-wrap: wrap; }
     .sidebar { grid-template-columns: 1fr; }
