@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
-import { DECK_SIZE, INITIAL_SIZE, keyAt, type RoomState } from '../shared/game';
+import { INITIAL_SIZE, keyAt, type RoomState } from '../shared/game';
 import { CardArt, describeCard } from './CardArt';
 
 export type Play = NonNullable<RoomState['play']>;
@@ -78,8 +78,12 @@ export function GameBoard({ play, version, pending, message, claim }: Props) {
   });
 
   return <section className="table" aria-labelledby="board-title">
-    <div className="table-bar">
-      <h2 id="board-title">게임 보드</h2>
+    <div className="table-bar board-heading">
+      <h1 id="board-title">게임 보드</h1>
+      <dl className="board-stats">
+        <div><dt>찾은 SET</dt><dd>{play.found}</dd></div>
+        <div><dt>남은 덱</dt><dd>{play.cardsLeft}</dd></div>
+      </dl>
       <span className="selection" aria-label={`선택한 카드 ${selected.length}장`}>
         {Array.from({ length: 3 }, (_, index) => <i key={index} data-filled={index < selected.length} />)}
         {selected.length} / 3
@@ -108,8 +112,4 @@ export function GameBoard({ play, version, pending, message, claim }: Props) {
       <button type="button" className="text-button" disabled={!selected.length} onClick={() => setSelected([])}><kbd>ESC</kbd> 선택 해제</button>
     </div>
   </section>;
-}
-
-export function DeckMeter({ remaining }: { remaining: number }) {
-  return <div className="deck-meter" aria-hidden="true"><span style={{ width: `${100 * remaining / (DECK_SIZE - INITIAL_SIZE)}%` }} /></div>;
 }

@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Global } from '@emotion/react';
 import { createGame, isSet, replaceSet, type Game, type GameEvent, type Player } from '../shared/game';
 import { CardArt } from './CardArt';
-import { DeckMeter, GameBoard, type Play } from './GameBoard';
+import { GameBoard, type Play } from './GameBoard';
 import { Action, styles } from './styles';
 import { useRoom } from './room';
 
@@ -66,21 +66,22 @@ function Connection({ online }: { online: boolean }) {
 }
 
 function Roster({ players, me, scores = false }: { players: Player[]; me: number; scores?: boolean }) {
-  return <ul className="roster" aria-label={scores ? '플레이어 점수' : '참가자 목록'}>{players.map(player => <li key={player.id}>
+  return <ul className={scores ? 'roster compact-roster' : 'roster'} aria-label={scores ? '플레이어 점수' : '참가자 목록'}>{players.map(player => <li key={player.id}>
     <span>플레이어 {player.id}{player.id === me ? ' (나)' : ''}</span>
     <strong>{scores ? player.score : player.id === 1 ? '방장' : '참가자'}</strong>
   </li>)}</ul>;
 }
 
 function Rules() {
-  return <section className="side-panel">
-    <h2>SET 만드는 법</h2>
+  return <details className="play-detail">
+    <summary>게임 규칙</summary>
+    <p>카드를 클릭하거나 카드에 적힌 키로 선택하세요.</p>
     <p>세 카드의 개수, 색, 모양, 채움이 속성마다 <strong>모두 같거나 모두 다르면</strong> SET입니다.</p>
     <div className="examples" role="img" aria-label="보라색 타원이 각각 1개, 2개, 3개인 SET 예시">
       {examples.map(card => <div key={card.count}><CardArt card={card} /></div>)}
     </div>
     <p>가능한 SET이 없으면 카드 세 장을 더 열어요. 첫 추가 열은 <kbd>T</kbd> <kbd>G</kbd> <kbd>B</kbd>입니다.</p>
-  </section>;
+  </details>;
 }
 
 const playable = (game: Game, event: GameEvent): Play => ({ slots: game.slots, cardsLeft: game.deck.length, found: game.found, finished: game.finished, event });
@@ -120,7 +121,7 @@ function App() {
 
   const extra = play.event.added ? ` 가능한 SET이 없어 카드 ${play.event.added}장을 더 열었어요.` : '';
   const message = play.finished ? `게임 종료 · SET ${play.found}개를 찾았어요!` : play.event.player
-    ? `${session ? `플레이어 ${play.event.player}의 SET!` : 'SET 성공!'}${extra}` : `세 장을 골라 SET을 찾아보세요.${extra}`;
+    ? `${session ? `플레이어 ${play.event.player}의 SET!` : 'SET 성공!'}${extra}` : extra.trim();
 
   return <>
     <Global styles={styles} />
@@ -156,19 +157,23 @@ function App() {
           : <p className="notice" role="status">방장이 시작하면 자동으로 이동해요.</p>}
         {error && <p className="notice" role="status">{error}</p>}
       </Panel>}
-      {page === 'play' && <>
-        <section className="play-intro"><h1>{session ? '같은 보드, 다른 시선.' : '혼자 연습하기'}</h1><p>클릭하거나 카드에 적힌 키를 눌러 SET을 찾으세요.</p></section>
-        <div className="play-layout">
-          <GameBoard key={session?.code ?? 'solo'} play={play} version={version} pending={busy} message={error || soloError || message} claim={claim} />
-          <aside className="sidebar" aria-label="게임 정보">
-            <section className="side-panel score"><h2>게임 기록</h2><dl><div><dt>찾은 SET</dt><dd>{play.found}</dd></div><div><dt>남은 덱</dt><dd>{play.cardsLeft}</dd></div></dl>
-              <DeckMeter remaining={play.cardsLeft} />{session && <Roster players={session.room.players} me={session.id} scores />}
-            </section>
-            {session && <section className="side-panel"><div className="room-heading"><h2>함께 플레이</h2><Connection online={online} /></div><RoomInvite code={session.code} /><a className="quiet" href="/">나가기</a></section>}
+      {page === 'play' && <div className="play-layout">
+        <GameBoard key={session?.code ?? 'solo'} play={play} version={version} pending={busy} message={error || soloError || message} claim={claim} />
+        <aside className="play-details" aria-label="게임 정보">
+          {session && <Roster players={session.room.players} me={session.id} scores />}
+          <div className="play-tools">
             <Rules />
-          </aside>
-        </div>
-      </>}
+            {session && <>
+              <details className="play-detail">
+                <summary>방 정보</summary>
+                <RoomInvite code={session.code} />
+              </details>
+              <Connection online={online} />
+              <a className="quiet" href="/">나가기</a>
+            </>}
+          </div>
+        </aside>
+      </div>}
     </main>
   </>;
 }
