@@ -1,4 +1,4 @@
-import { createGame, isSet, replaceSet, type Game, type GameEvent, type Player, type RoomSession, type RoomState } from '../shared/game.ts';
+import { MAX_ROOM_PLAYERS, createGame, isSet, replaceSet, type Game, type GameEvent, type Player, type RoomSession, type RoomState } from '../shared/game.ts';
 
 type Member = Player & { token: string };
 export interface Room {
@@ -54,7 +54,7 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
 
   if (action === 'join') {
     if (player) return { status: 200, body: session(code, room, player), changed: false };
-    if (room.players.length >= 20) return error(409, '방이 가득 찼어요.');
+    if (room.players.length >= MAX_ROOM_PLAYERS) return error(409, `방이 가득 찼어요. 최대 ${MAX_ROOM_PLAYERS}명까지 입장할 수 있어요.`);
     const guest = addPlayer(room);
     room.version++;
     return { status: 200, body: session(code, room, guest), changed: true };

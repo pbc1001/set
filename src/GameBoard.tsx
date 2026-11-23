@@ -43,6 +43,7 @@ export function GameBoard({ play, version, pending, message, claim }: Props) {
   }, [play, version]);
 
   const locked = pending || burst.length > 0 || display.finished;
+  const hasCards = display.slots.some(card => card !== null);
   const columns = 4 + Math.max(0, (display.slots.length - INITIAL_SIZE) / 3);
   const positions = Array.from({ length: columns * 3 }, (_, index) => {
     const row = Math.floor(index / columns);
@@ -89,8 +90,8 @@ export function GameBoard({ play, version, pending, message, claim }: Props) {
         {selected.length} / 3
       </span>
     </div>
-    <div className="board-area">
-      <div className="board" role="group" aria-label="카드" style={{ '--columns': columns } as CSSProperties}>
+    {(hasCards || celebrating) && <div className="board-area" data-empty={!hasCards}>
+      {hasCards && <div className="board" role="group" aria-label="카드" style={{ '--columns': columns } as CSSProperties}>
         {positions.map((position, index) => {
           const card = display.slots[position];
           if (!card) return <div key={position} aria-hidden="true" />;
@@ -103,13 +104,15 @@ export function GameBoard({ play, version, pending, message, claim }: Props) {
             <kbd aria-hidden="true">{key}</kbd><CardArt card={card} />
           </button>;
         })}
-        {display.slots.every(card => card === null) && <p className="finished">모든 카드를 SET으로 찾았어요!</p>}
-      </div>
+      </div>}
       {celebrating && <div className="celebration" aria-hidden="true"><strong>SET!</strong>{Array.from({ length: 6 }, (_, index) => <i key={index} />)}</div>}
-    </div>
-    <div className="table-bar table-foot">
+    </div>}
+    {display.finished ? <div className="game-result" role="status">
+      <strong>게임 종료</strong>
+      <span>SET {display.found}개를 찾았어요. {hasCards ? '남은 카드에 가능한 SET이 없어요.' : '모든 카드를 사용했어요.'}</span>
+    </div> : <div className="table-bar table-foot">
       <p role="status">{selected.length ? `카드 ${3 - selected.length}장을 더 선택하세요.` : message}</p>
       <button type="button" className="text-button" disabled={!selected.length} onClick={() => setSelected([])}><kbd>ESC</kbd> 선택 해제</button>
-    </div>
+    </div>}
   </section>;
 }

@@ -1,5 +1,6 @@
 export const INITIAL_SIZE = 12;
 export const DECK_SIZE = 81;
+export const MAX_ROOM_PLAYERS = 4;
 const attributes = ['count', 'color', 'shape', 'fill'] as const;
 const columns = ['QAZ', 'WSX', 'EDC', 'RFV', 'TGB', 'YHN', 'UJM'];
 
@@ -53,13 +54,12 @@ function hasSet(slots: Board['slots']) {
 
 function ensurePlayable(game: Game) {
   const before = game.slots.length;
-  while (!hasSet(game.slots)) {
-    if (game.deck.length === 0) {
-      game.finished = true;
-      break;
-    }
+  let canPlay = hasSet(game.slots);
+  while (!canPlay && game.deck.length > 0) {
     game.slots.push(...game.deck.splice(-3));
+    canPlay = hasSet(game.slots);
   }
+  game.finished = !canPlay;
   return game.slots.length - before;
 }
 

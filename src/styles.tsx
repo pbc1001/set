@@ -104,6 +104,7 @@ export const styles = css`
   .selection i { width: 6px; height: 6px; border: 1px solid #93abae; border-radius: 50%; }
   .selection i[data-filled='true'] { border-color: var(--accent); background: var(--accent); }
   .board-area { position: relative; }
+  .board-area[data-empty='true'] { min-height: 115px; }
   .board { --card-width: clamp(96px, calc((100svh - 224px) * .238), 182px); display: grid; grid-template-columns: repeat(var(--columns), minmax(0, var(--card-width))); justify-content: center; gap: clamp(6px, .85vw, 12px); }
   .playing-card { position: relative; display: block; min-width: 0; width: 100%; aspect-ratio: 5 / 7; padding: 0; border: 1px solid #fcfaf0; border-radius: clamp(6px, 1vw, 12px); background: linear-gradient(142deg, #fffdf5, var(--card)); color: #263b40; box-shadow: 0 3px 0 #95a2a1; touch-action: manipulation; }
   @media (hover: hover) { .playing-card[aria-pressed='false'][aria-disabled='false']:hover { background: #e7f7ee; } }
@@ -116,7 +117,8 @@ export const styles = css`
   .text-button { border: 0; padding: 7px 0; background: transparent; color: var(--ink); white-space: nowrap; }
   .text-button:disabled { opacity: .65; }
   .text-button kbd, .play-detail kbd { padding: 2px 4px; border: 1px solid currentColor; border-radius: 4px; }
-  .finished { grid-column: 1 / -1; padding: 30px 5px; text-align: center; }
+  .game-result { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px; margin-top: 9px; padding: 8px 10px; border: 1px solid #416762; border-radius: 8px; background: #172b2b; color: var(--muted); font-size: .875rem; }
+  .game-result strong { color: var(--accent); }
   .playing-card[data-burst='true'] { animation: lift .38s var(--delay) ease-in both; z-index: 1; }
   .playing-card[data-burst='true']::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(115deg, transparent 35%, #f0fff8 50%, transparent 65%); background-size: 250% 100%; animation: sweep .36s var(--delay) ease-out both; }
   .celebration { position: absolute; z-index: 4; inset: 0; display: grid; place-items: center; pointer-events: none; overflow: hidden; }

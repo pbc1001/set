@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Global } from '@emotion/react';
-import { createGame, isSet, replaceSet, type Game, type GameEvent, type Player } from '../shared/game';
+import { MAX_ROOM_PLAYERS, createGame, isSet, replaceSet, type Game, type GameEvent, type Player } from '../shared/game';
 import { CardArt } from './CardArt';
 import { GameBoard, type Play } from './GameBoard';
 import { Action, styles } from './styles';
@@ -120,7 +120,7 @@ function App() {
   }
 
   const extra = play.event.added ? ` 가능한 SET이 없어 카드 ${play.event.added}장을 더 열었어요.` : '';
-  const message = play.finished ? `게임 종료 · SET ${play.found}개를 찾았어요!` : play.event.player
+  const message = play.event.player
     ? `${session ? `플레이어 ${play.event.player}의 SET!` : 'SET 성공!'}${extra}` : extra.trim();
 
   return <>
@@ -151,7 +151,7 @@ function App() {
         <Connection online={online} />
         <p>친구에게 방 코드나 초대 링크를 보내세요.</p>
         <RoomInvite code={session.code} />
-        <h2 className="roster-title">참가자 <strong>{session.room.players.length}명</strong></h2>
+        <h2 className="roster-title">참가자 <strong>{session.room.players.length} / {MAX_ROOM_PLAYERS}명</strong></h2>
         <Roster players={session.room.players} me={session.id} />
         {session.id === 1 ? <Action as="button" type="button" disabled={busy} onClick={() => void move('start')}>게임 시작</Action>
           : <p className="notice" role="status">방장이 시작하면 자동으로 이동해요.</p>}
