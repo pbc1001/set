@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { INITIAL_SIZE, keyAt, type Play } from '../shared/game';
 import { CardArt, describeCard } from './CardArt';
 
@@ -8,12 +8,13 @@ interface Props {
   pending: boolean;
   spectator: boolean;
   practice?: boolean;
+  standings?: ReactNode;
   message: string;
   returnsToLobby: boolean;
   claim: (positions: number[]) => void;
 }
 
-export function GameBoard({ play, version, pending, spectator, practice, message, returnsToLobby, claim }: Props) {
+export function GameBoard({ play, version, pending, spectator, practice, standings, message, returnsToLobby, claim }: Props) {
   const [display, setDisplay] = useState(play);
   const [selected, setSelected] = useState<number[]>([]);
   const [burst, setBurst] = useState<number[]>([]);
@@ -114,6 +115,7 @@ export function GameBoard({ play, version, pending, spectator, practice, message
     {display.finished ? <div className="game-result" role="status">
       <strong>게임 종료</strong>
       <span>SET {display.found}개를 찾았어요. {hasCards ? '남은 카드에 가능한 SET이 없어요.' : '모든 카드를 사용했어요.'}{returnsToLobby && ' 잠시 후 대기실로 돌아가요.'}</span>
+      {standings}
     </div> : <div className="table-bar table-foot">
       <p role="status">{selected.length ? `카드 ${3 - selected.length}장을 더 선택하세요.` : message}</p>
       {!spectator && <button type="button" className="text-button" disabled={!selected.length} onClick={() => setSelected([])}><kbd>ESC</kbd> 선택 해제</button>}

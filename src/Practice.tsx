@@ -27,10 +27,10 @@ async function request<T>(path: string, body?: object, timeout = 8000): Promise<
 }
 
 type Run = { online: true; practice: PracticeSnapshot } | { online: false; id: string; game: Game; event: GameEvent };
-type PracticeResponse = { practice: PracticeSnapshot };
+type PracticeResponse = { practice: PracticeSnapshot; needsName?: boolean };
 
-function RecordPrompt({ busy, score, error, save, dismiss }: {
-  busy: boolean; score: number; error: string; save: (name: string) => void; dismiss: () => void;
+function RecordPrompt({ busy, score, error, save, dismiss, skip }: {
+  busy: boolean; score: number; error: string; save: (name: string) => void; dismiss: () => void; skip: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState('');
@@ -46,10 +46,11 @@ function RecordPrompt({ busy, score, error, save, dismiss }: {
       <label htmlFor="record-name">이름</label>
       <input id="record-name" autoComplete="off" maxLength={RECORD_NAME_LIMIT} required value={name} onChange={event => setName(event.target.value)} />
       <div className="actions">
-        <Action as="button" type="submit" disabled={busy || !name.trim()}>기록 올리기</Action>
-        <Action as="button" data-secondary type="button" disabled={busy} onClick={dismiss}>나중에</Action>
+        <Action as="button" type="submit" disabled={busy || !name.trim()}>등록하고 나가기</Action>
+        <Action as="button" data-secondary type="button" disabled={busy} onClick={dismiss}>계속 연습</Action>
       </div>
     </form>
+    <button className="quiet leave-button" type="button" disabled={busy} onClick={skip}>등록 없이 나가기</button>
     {error && <p className="notice" role="status">{error}</p>}
   </dialog>;
 }
@@ -58,7 +59,7 @@ export function Practice({ children }: { children: ReactNode }) {
   const [run, setRun] = useState<Run | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
-  const [dismissed, setDismissed] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
   const sending = useRef(false);
 
   async function start() {
@@ -72,7 +73,7 @@ export function Practice({ children }: { children: ReactNode }) {
     } catch {
       setRun({ online: false, id: crypto.randomUUID(), ...createGame() });
     } finally {
-      setDismissed(false);
+      setShowPrompt(false);
       setBusy(false);
       sending.current = false;
     }
@@ -83,13 +84,11 @@ export function Practice({ children }: { children: ReactNode }) {
   if (!run) return <p className="route-panel" role="status">연습 게임을 준비하고 있어요.</p>;
   const practice = run.online ? run.practice : null;
   const play = run.online ? run.practice.play : boardView(run.game, run.event);
-  const qualifies = Boolean(practice && !practice.name && play.found > practice.best);
-  const showPrompt = qualifies && !dismissed;
   const message = play.event.newDeck ? '덱을 새로 섞었어요.'
     : play.event.added ? `가능한 SET이 없어 카드 ${play.event.added}장을 더 열었어요.`
       : play.event.player ? 'SET 성공!' : '';
 
-  async function update(path: 'claim' | 'record', body: object) {
+  async function update(path: 'claim' | 'finish', body: object) {
     if (!practice || sending.current) return;
     sending.current = true;
     setBusy(true);
@@ -97,6 +96,7 @@ export function Practice({ children }: { children: ReactNode }) {
     try {
       const next = await request<PracticeResponse>(`/${practice.id}/${path}`, body);
       setRun({ online: true, practice: next.practice });
+      return next;
     } catch (error) {
       if (error instanceof PracticeError && error.practice) setRun({ online: true, practice: error.practice });
       setError(error instanceof PracticeError ? error.message : unavailable);
@@ -104,6 +104,21 @@ export function Practice({ children }: { children: ReactNode }) {
       setBusy(false);
       sending.current = false;
     }
+  }
+
+  async function leave(body: { name?: string; skipRecord?: boolean } = {}) {
+    if (sending.current) return;
+    if (!practice) {
+      location.assign('/');
+      return;
+    }
+
+    const next = await update('finish', body);
+    if (next?.needsName || (!next && !body.name && !body.skipRecord && play.found > practice.best)) {
+      setShowPrompt(true);
+      return;
+    }
+    if (next || !body.name) location.assign(next?.practice.name && body.name ? '/records' : '/');
   }
 
   function claim(positions: number[]) {
@@ -126,20 +141,22 @@ export function Practice({ children }: { children: ReactNode }) {
     <div className="practice-toolbar">
       <a className="quiet" href="/records" target="_blank" rel="noopener" aria-label="명예의 전당 (새 탭)">명예의 전당 <span aria-hidden="true">↗</span></a>
       {practice && <span>최고 기록 <strong>{practice.best} SET</strong></span>}
-      <button className="small-button" type="button" disabled={busy} onClick={() => void start()}>새 게임</button>
+      <div className="play-tools">
+        <button className="small-button" type="button" disabled={busy} onClick={() => void start()}>새 게임</button>
+        <button className="small-button" type="button" disabled={busy} onClick={() => void leave()}>나가기</button>
+      </div>
     </div>
     <GameBoard key={run.online ? run.practice.id : run.id} play={play} version={play.found} pending={busy || showPrompt} spectator={false}
       practice message={error || message} returnsToLobby={false} claim={claim} />
     <aside className="play-details" aria-label="연습 정보">
       <div className="play-tools">
         {children}
-        {qualifies && dismissed && <button className="small-button" type="button" onClick={() => { setError(''); setDismissed(false); }}>최고 기록 올리기</button>}
-        {practice?.name && <span role="status">명예의 전당에 {practice.name}(으)로 등록됐어요.</span>}
         {!run.online && <span role="status">오프라인 연습 중 · 기록은 저장되지 않아요.</span>}
       </div>
     </aside>
     {showPrompt && <RecordPrompt score={play.found} busy={busy} error={error}
-      save={name => void update('record', { name })} dismiss={() => { setError(''); setDismissed(true); }} />}
+      save={name => void leave({ name })} dismiss={() => { setError(''); setShowPrompt(false); }}
+      skip={() => void leave({ skipRecord: true })} />}
   </div>;
 }
 

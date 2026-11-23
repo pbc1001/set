@@ -27,6 +27,7 @@ export interface RoomState {
   boardVersion: number;
   players: Player[];
   play: Play | null;
+  roundResult?: Player[];
 }
 export type RoomSession = { code: string; room: RoomState } & (
   { id: number; token: string } | { id: null; token: null }

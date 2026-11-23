@@ -76,6 +76,21 @@ function Roster({ players, me, scores = false }: { players: Player[]; me: number
   </li>)}</ul>;
 }
 
+function RoundStandings({ players, title }: { players: Player[]; title: string }) {
+  return <section className="round-standings">
+    <h2>{title}</h2>
+    <ol aria-label={title}>{players.map(player => {
+      const rank = players.findIndex(other => other.score === player.score) + 1;
+      const tied = players.filter(other => other.score === player.score).length > 1;
+      return <li key={player.id} data-winner={rank === 1}>
+        <strong>{tied && '공동 '}{rank}위</strong>
+        <span>플레이어 {player.id}{rank === 1 && <small>승리</small>}</span>
+        <b>{player.score} SET</b>
+      </li>;
+    })}</ol>
+  </section>;
+}
+
 function Rules() {
   return <details className="play-detail">
     <summary>게임 규칙</summary>
@@ -93,6 +108,7 @@ function App() {
   const [code, setCode] = useState(invited ?? '');
   const page = session ? session.room.play ? 'play' : 'lobby' : initialPage === 'lobby' ? 'join' : initialPage;
   const play = session?.room.play;
+  const roundResult = session?.room.roundResult;
   const spectator = session?.id === null;
   const isHost = Boolean(session && session.id === session.room.players[0]?.id);
   const leaveButton = <button className="quiet leave-button" type="button" disabled={busy} onClick={() => void move('leave')}>나가기</button>;
@@ -140,6 +156,7 @@ function App() {
         <RoomInvite code={session.code} />
         <h2 className="roster-title">참가자 <strong>{session.room.players.length} / {MAX_ROOM_PLAYERS}명</strong></h2>
         <Roster players={session.room.players} me={session.id} />
+        {!!roundResult?.length && <RoundStandings players={roundResult} title="지난 게임 결과" />}
         {isHost && <Action as="button" type="button" disabled={busy} onClick={() => void move('start')}>게임 시작</Action>}
         {spectator && <>
           <p className="notice" role="status">관전 중</p>
@@ -152,6 +169,7 @@ function App() {
       {page === 'play' && !session && <Practice><Rules /></Practice>}
       {session && play && <div className="play-layout">
         <GameBoard key={session.code} play={play} version={session.room.boardVersion} pending={busy} spectator={spectator} message={error || message} returnsToLobby
+          standings={!!roundResult?.length && <RoundStandings players={roundResult} title="최종 순위" />}
           claim={positions => void move('claim', positions.flatMap(position => play.slots[position]?.id ?? []))} />
         <aside className="play-details" aria-label="게임 정보">
           <Roster players={session.room.players} me={session.id} scores />

@@ -131,6 +131,13 @@ export const styles = css`
   .text-button kbd, .play-detail kbd { padding: 2px 4px; border: 1px solid currentColor; border-radius: 4px; }
   .game-result { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px; margin-top: 9px; padding: 8px 10px; border: 1px solid #416762; border-radius: 8px; background: #172b2b; color: var(--muted); font-size: .875rem; }
   .game-result strong { color: var(--accent); }
+  .round-standings { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  .game-result .round-standings { margin: 5px 0 0; }
+  .round-standings ol { list-style: none; display: grid; gap: 4px; margin: 8px 0 0; padding: 0; }
+  .round-standings li { display: grid; grid-template-columns: minmax(4.5rem, auto) 1fr auto; align-items: baseline; gap: 6px; padding: 4px 7px; border-radius: 5px; color: var(--ink); font-size: .875rem; }
+  .round-standings li[data-winner='true'] { background: #223936; }
+  .round-standings li small { margin-inline-start: 6px; color: var(--accent); }
+  .round-standings li b { white-space: nowrap; font-variant-numeric: tabular-nums; }
   .playing-card[data-burst='true'] { animation: lift .38s var(--delay) ease-in both; z-index: 1; }
   .playing-card[data-burst='true']::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(115deg, transparent 35%, #f0fff8 50%, transparent 65%); background-size: 250% 100%; animation: sweep .36s var(--delay) ease-out both; }
   .celebration { position: absolute; z-index: 4; inset: 0; display: grid; place-items: center; pointer-events: none; overflow: hidden; }
@@ -148,7 +155,7 @@ export const styles = css`
   .play-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
   .practice-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--muted); font-size: .875rem; }
   .practice-toolbar strong { color: var(--accent); }
-  .practice-toolbar button { margin-inline-start: auto; }
+  .practice-toolbar > .play-tools { margin-inline-start: auto; }
   .play-detail { min-width: 0; font-size: .875rem; }
   .play-detail[open] { flex: 1 0 100%; padding: 0 10px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
   .play-detail summary { padding: 4px 0; cursor: pointer; color: var(--muted); font-weight: 700; }

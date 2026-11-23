@@ -4,10 +4,10 @@ import { RECORD_NAME_LIMIT, replacePracticeSet, type PracticeRecord, type Practi
 const recordKey = 'records';
 const recordLimit = 10;
 const runId = '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}';
-export const practicePath = new RegExp(`^/api/practice(?:/(records|(${runId})/(claim|record)))?$`);
+export const practicePath = new RegExp(`^/api/practice(?:/(records|(${runId})/(claim|finish)))?$`);
 
 type Entry = PracticeRecord & { runId: string };
-interface Run { game: Game; event: GameEvent; name: string | null }
+interface Run { game: Game; event: GameEvent; name: string | null; ended?: boolean }
 export interface PracticeStorage {
   get<T>(key: string): T | undefined;
   put(key: string, value: Run | Entry[]): void;
@@ -40,6 +40,7 @@ export function practiceAction(match: RegExpExecArray, method: string, body: Rec
 
   const conflict = (message: string) => ({ status: 409, body: { error: message, practice: snapshot(id, run) } });
   if (action === 'claim') {
+    if (run.ended) return conflict('이미 종료한 연습 게임이에요.');
     if (body.version !== run.game.found) return conflict('보드가 바뀌었어요. 새 조합을 찾아보세요.');
     const { cards } = body;
     if (!Array.isArray(cards) || cards.length !== 3 || new Set(cards).size !== 3 || !cards.every(Number.isInteger)) {
@@ -49,22 +50,27 @@ export function practiceAction(match: RegExpExecArray, method: string, body: Rec
     const [first, second, third] = positions.map(position => run.game.slots[position]);
     if (!first || !second || !third || !isSet(first, second, third)) return error(422, 'SET이 아니에요. 다른 세 장을 골라 보세요.');
     run.event = replacePracticeSet(run.game, positions);
-  } else {
-    if (run.name) return { status: 200, body: { practice: snapshot(id, run) } };
+    storage.put(id, run);
+    return { status: 200, body: { practice: snapshot(id, run) } };
+  }
+
+  if (run.ended) return { status: 200, body: { practice: snapshot(id, run) } };
+
+  const qualifies = run.game.found > (records[0]?.score ?? 0);
+  if (body.skipRecord !== true && body.name !== undefined) {
+    if (!qualifies) return conflict('현재 최고 기록을 넘어야 등록할 수 있어요.');
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name || name.length > RECORD_NAME_LIMIT || /[\x00-\x1f\x7f]/.test(name)) {
       return error(400, `이름을 ${RECORD_NAME_LIMIT}자 이내로 입력해 주세요.`);
     }
-    if (run.game.found <= (records[0]?.score ?? 0)) return conflict('새 최고 기록을 넘으면 이름을 올릴 수 있어요.');
     run.name = name;
-  }
-
-  storage.put(id, run);
-  if (run.name) {
-    const entry = { runId: id, name: run.name, score: run.game.found };
-    records = [...records.filter(record => record.runId !== id), entry]
+    records = [...records.filter(record => record.runId !== id), { runId: id, name, score: run.game.found }]
       .sort((a, b) => b.score - a.score).slice(0, recordLimit);
     storage.put(recordKey, records);
+  } else if (body.skipRecord !== true && qualifies) {
+    return { status: 200, body: { practice: snapshot(id, run), needsName: true } };
   }
+  run.ended = true;
+  storage.put(id, run);
   return { status: 200, body: { practice: snapshot(id, run) } };
 }

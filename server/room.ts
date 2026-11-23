@@ -10,6 +10,12 @@ export interface Room {
   game: Game | null;
   event: GameEvent;
   returnToLobbyAt?: number;
+  roundResult?: Player[];
+}
+
+function saveRoundResult(room: Room) {
+  room.roundResult = room.players.map(({ id, score }) => ({ id, score }))
+    .sort((a, b) => b.score - a.score || a.id - b.id);
 }
 
 function clearGame(room: Room) {
@@ -22,6 +28,7 @@ function clearGame(room: Room) {
 export function returnToLobby(room: Room) {
   if (!room.game?.finished || (room.returnToLobbyAt ?? 0) > Date.now()) return false;
 
+  if (!room.roundResult) saveRoundResult(room);
   clearGame(room);
   room.version++;
   return true;
@@ -34,6 +41,7 @@ export function snapshot(room: Room): RoomState {
     boardVersion: room.boardVersion,
     players: room.players.map(({ id, score }) => ({ id, score })),
     play: game && boardView(game, event),
+    roundResult: room.roundResult,
   };
 }
 
@@ -103,6 +111,7 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
   if (action === 'start' || action === 'reset') {
     if (player.id !== room.players[0].id) return error(403, '방장만 게임을 시작할 수 있어요.');
     Object.assign(room, createGame());
+    delete room.roundResult;
     for (const member of room.players) member.score = 0;
   } else {
     const game = room.game!;
@@ -116,7 +125,10 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
     if (!isSet(first, second, third)) return error(422, 'SET이 아니에요. 다른 세 장을 골라 보세요.');
     room.event = { added: replaceSet(game, positions), player: player.id, positions };
     player.score++;
-    if (game.finished) room.returnToLobbyAt = Date.now() + RESULTS_DURATION_MS;
+    if (game.finished) {
+      saveRoundResult(room);
+      room.returnToLobbyAt = Date.now() + RESULTS_DURATION_MS;
+    }
   }
 
   room.boardVersion++;
