@@ -8,12 +8,13 @@ interface Props {
   play: Play;
   version: number;
   pending: boolean;
+  spectator: boolean;
   message: string;
   returnsToLobby: boolean;
   claim: (positions: number[]) => void;
 }
 
-export function GameBoard({ play, version, pending, message, returnsToLobby, claim }: Props) {
+export function GameBoard({ play, version, pending, spectator, message, returnsToLobby, claim }: Props) {
   const [display, setDisplay] = useState(play);
   const [selected, setSelected] = useState<number[]>([]);
   const [burst, setBurst] = useState<number[]>([]);
@@ -43,7 +44,7 @@ export function GameBoard({ play, version, pending, message, returnsToLobby, cla
     return () => { window.clearTimeout(replacement); window.clearTimeout(end); };
   }, [play, version]);
 
-  const locked = pending || burst.length > 0 || display.finished;
+  const locked = spectator || pending || burst.length > 0 || display.finished;
   const hasCards = display.slots.some(card => card !== null);
   const columns = 4 + Math.max(0, (display.slots.length - INITIAL_SIZE) / 3);
   const positions = Array.from({ length: columns * 3 }, (_, index) => {
@@ -62,6 +63,7 @@ export function GameBoard({ play, version, pending, message, returnsToLobby, cla
   }
 
   useEffect(() => {
+    if (spectator) return;
     const shortcut = (event: KeyboardEvent) => {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.target instanceof HTMLInputElement) return;
       if (event.key === 'Escape') {
@@ -86,10 +88,10 @@ export function GameBoard({ play, version, pending, message, returnsToLobby, cla
         <div><dt>찾은 SET</dt><dd>{play.found}</dd></div>
         <div><dt>남은 덱</dt><dd>{play.cardsLeft}</dd></div>
       </dl>
-      <span className="selection" aria-label={`선택한 카드 ${selected.length}장`}>
+      {spectator ? <span className="connection" role="status">관전 중</span> : <span className="selection" aria-label={`선택한 카드 ${selected.length}장`}>
         {Array.from({ length: 3 }, (_, index) => <i key={index} data-filled={index < selected.length} />)}
         {selected.length} / 3
-      </span>
+      </span>}
     </div>
     {(hasCards || celebrating) && <div className="board-area" data-empty={!hasCards}>
       {hasCards && <div className="board" role="group" aria-label="카드" style={{ '--columns': columns } as CSSProperties}>
@@ -99,10 +101,11 @@ export function GameBoard({ play, version, pending, message, returnsToLobby, cla
           const key = keyAt(position);
           const order = burst.indexOf(position);
           return <button key={card.id} type="button" className="playing-card" data-extra={position >= INITIAL_SIZE}
-            data-burst={order >= 0} aria-keyshortcuts={key} aria-pressed={selected.includes(position)}
-            aria-disabled={locked} aria-label={`${key}, ${describeCard(card)}`} onClick={() => choose(position)}
+            data-burst={order >= 0} tabIndex={spectator ? -1 : undefined} aria-keyshortcuts={spectator ? undefined : key}
+            aria-pressed={spectator ? undefined : selected.includes(position)} aria-disabled={locked}
+            aria-label={spectator ? describeCard(card) : `${key}, ${describeCard(card)}`} onClick={() => choose(position)}
             style={{ '--delay': `${order * 45}ms`, gridColumn: index % columns + 1, gridRow: Math.floor(index / columns) + 1 } as CSSProperties}>
-            <kbd aria-hidden="true">{key}</kbd><CardArt card={card} />
+            {!spectator && <kbd aria-hidden="true">{key}</kbd>}<CardArt card={card} />
           </button>;
         })}
       </div>}
@@ -113,7 +116,7 @@ export function GameBoard({ play, version, pending, message, returnsToLobby, cla
       <span>SET {display.found}개를 찾았어요. {hasCards ? '남은 카드에 가능한 SET이 없어요.' : '모든 카드를 사용했어요.'}{returnsToLobby && ' 잠시 후 대기실로 돌아가요.'}</span>
     </div> : <div className="table-bar table-foot">
       <p role="status">{selected.length ? `카드 ${3 - selected.length}장을 더 선택하세요.` : message}</p>
-      <button type="button" className="text-button" disabled={!selected.length} onClick={() => setSelected([])}><kbd>ESC</kbd> 선택 해제</button>
+      {!spectator && <button type="button" className="text-button" disabled={!selected.length} onClick={() => setSelected([])}><kbd>ESC</kbd> 선택 해제</button>}
     </div>}
   </section>;
 }

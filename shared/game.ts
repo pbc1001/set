@@ -27,8 +27,10 @@ export interface RoomState {
   players: Player[];
   play: (Board & { cardsLeft: number; event: GameEvent }) | null;
 }
-export interface RoomSession { code: string; id: number; token: string; room: RoomState }
-export type Move = 'start' | 'reset' | 'claim';
+export type RoomSession = { code: string; room: RoomState } & (
+  { id: number; token: string } | { id: null; token: null }
+);
+export type Move = 'start' | 'reset' | 'claim' | 'leave';
 
 export function keyAt(position: number) {
   if (position < INITIAL_SIZE) return columns[position % 4][Math.floor(position / 4)];

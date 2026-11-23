@@ -51,6 +51,7 @@ export const styles = css`
   .brand span span { color: var(--accent); margin-left: 2px; }
   .quiet { font-size: .875rem; font-weight: 750; color: var(--muted); text-underline-offset: 4px; }
   .quiet:hover { color: var(--accent); }
+  .leave-button { min-height: 36px; padding: 0; border: 0; background: none; text-decoration: underline; text-align: left; }
   .actions { display: flex; gap: 9px; flex-wrap: wrap; margin: 26px 0 14px; }
   .small-button { padding: 7px 11px; min-height: 41px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-raised); color: var(--ink); font-size: .875rem; font-weight: 750; white-space: nowrap; }
   .small-button:enabled:hover { background: #283840; border-color: var(--accent); }
@@ -72,7 +73,7 @@ export const styles = css`
   .route-panel { width: min(100%, 477px); margin: clamp(25px, 9svh, 86px) auto 40px; padding: clamp(16px, 5vw, 32px); background: linear-gradient(145deg, #1b2931, var(--surface) 70%); border: 1px solid var(--line); border-radius: 19px; box-shadow: 0 18px 44px #080c1060; }
   .route-panel h1 { margin: 13px 0 10px; font-size: clamp(1.9rem, 5vw, 2.55rem); letter-spacing: -.07em; }
   .route-panel p { margin: 10px 0 17px; color: var(--muted); word-break: keep-all; }
-  .route-panel > button { width: 100%; }
+  .route-panel > button:not(.leave-button) { width: 100%; }
   .join-form, .invite { display: flex; align-items: center; gap: 8px; }
   input, output { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: #101a21; color: var(--ink); }
   .join-form input { min-height: 47px; text-transform: uppercase; }

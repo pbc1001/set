@@ -32,9 +32,9 @@ function Home() {
   </section>;
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+function Panel({ title, children, navigation }: { title: string; children: ReactNode; navigation?: ReactNode }) {
   return <section className="route-panel">
-    <a className="quiet" href="/">홈으로</a>
+    {navigation ?? <a className="quiet" href="/">홈으로</a>}
     <h1>{title}</h1>
     {children}
   </section>;
@@ -65,10 +65,10 @@ function Connection({ online }: { online: boolean }) {
   return <span className="connection" data-online={online} role="status">{online ? '실시간 연결' : '연결 중'}</span>;
 }
 
-function Roster({ players, me, scores = false }: { players: Player[]; me: number; scores?: boolean }) {
+function Roster({ players, me, scores = false }: { players: Player[]; me: number | null; scores?: boolean }) {
   return <ul className={scores ? 'roster compact-roster' : 'roster'} aria-label={scores ? '플레이어 점수' : '참가자 목록'}>{players.map(player => <li key={player.id}>
     <span>플레이어 {player.id}{player.id === me ? ' (나)' : ''}</span>
-    <strong>{scores ? player.score : player.id === 1 ? '방장' : '참가자'}</strong>
+    <strong>{scores ? player.score : player.id === players[0].id ? '방장' : '참가자'}</strong>
   </li>)}</ul>;
 }
 
@@ -95,6 +95,9 @@ function App() {
   const practice = useMemo(() => playable(solo.game, solo.event), [solo]);
   const play = session?.room.play ?? practice;
   const version = session?.room.boardVersion ?? solo.version;
+  const spectator = session?.id === null;
+  const isHost = Boolean(session && session.id === session.room.players[0]?.id);
+  const leaveButton = <button className="quiet leave-button" type="button" disabled={busy} onClick={() => void move('leave')}>나가기</button>;
 
   useEffect(() => { if (invited) void enter(invited); }, []);
   useEffect(() => {
@@ -126,8 +129,13 @@ function App() {
   return <>
     <Global styles={styles} />
     <header className="topbar"><div className="shell topbar-inner">
-      <a href="/" className="brand" aria-label="SET LAB 홈"><b aria-hidden="true">✦</b><span>SET<span>LAB</span></span></a>
-      {page === 'play' && (!session || session.id === 1) && <button type="button" className="small-button" disabled={busy || Boolean(session && play.finished)} onClick={() => {
+      <a href="/" className="brand" aria-label="SET LAB 홈" onClick={event => {
+        if (session) {
+          event.preventDefault();
+          void move('leave');
+        }
+      }}><b aria-hidden="true">✦</b><span>SET<span>LAB</span></span></a>
+      {page === 'play' && (!session || isHost) && <button type="button" className="small-button" disabled={busy || Boolean(session && play.finished)} onClick={() => {
         if (session) void move('reset');
         else { setSolo({ ...createGame(), version: solo.version + 1 }); setSoloError(''); }
       }}>새 게임</button>}
@@ -147,18 +155,23 @@ function App() {
         </form>
         {error && <p className="notice" role="status">{error}</p>}
       </Panel>}
-      {page === 'lobby' && session && <Panel title="대기실">
+      {page === 'lobby' && session && <Panel title="대기실" navigation={leaveButton}>
         <Connection online={online} />
         <p>친구에게 방 코드나 초대 링크를 보내세요.</p>
         <RoomInvite code={session.code} />
         <h2 className="roster-title">참가자 <strong>{session.room.players.length} / {MAX_ROOM_PLAYERS}명</strong></h2>
         <Roster players={session.room.players} me={session.id} />
-        {session.id === 1 ? <Action as="button" type="button" disabled={busy} onClick={() => void move('start')}>게임 시작</Action>
-          : <p className="notice" role="status">방장이 시작하면 자동으로 이동해요.</p>}
+        {isHost && <Action as="button" type="button" disabled={busy} onClick={() => void move('start')}>게임 시작</Action>}
+        {spectator && <>
+          <p className="notice" role="status">관전 중</p>
+          {session.room.players.length < MAX_ROOM_PLAYERS &&
+            <Action as="button" type="button" disabled={busy} onClick={() => void enter(session.code, true)}>플레이어로 참가</Action>}
+        </>}
+        {!isHost && !spectator && <p className="notice" role="status">방장이 시작하면 자동으로 이동해요.</p>}
         {error && <p className="notice" role="status">{error}</p>}
       </Panel>}
       {page === 'play' && <div className="play-layout">
-        <GameBoard key={session?.code ?? 'solo'} play={play} version={version} pending={busy} message={error || soloError || message} returnsToLobby={Boolean(session)} claim={claim} />
+        <GameBoard key={session?.code ?? 'solo'} play={play} version={version} pending={busy} spectator={spectator} message={error || soloError || message} returnsToLobby={Boolean(session)} claim={claim} />
         <aside className="play-details" aria-label="게임 정보">
           {session && <Roster players={session.room.players} me={session.id} scores />}
           <div className="play-tools">
@@ -169,7 +182,7 @@ function App() {
                 <RoomInvite code={session.code} />
               </details>
               <Connection online={online} />
-              <a className="quiet" href="/">나가기</a>
+              {leaveButton}
             </>}
           </div>
         </aside>

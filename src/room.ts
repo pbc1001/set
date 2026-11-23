@@ -3,6 +3,7 @@ import type { Move, RoomSession, RoomState } from '../shared/game';
 
 const apiOrigin = import.meta.env.VITE_API_ORIGIN || (import.meta.env.DEV ? location.origin : '');
 const offline = '게임 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.';
+const spectatorMark = 'spectator';
 
 class RoomError extends Error {
   constructor(message: string, readonly room?: RoomState) { super(message); }
@@ -67,7 +68,7 @@ export function useRoom() {
     };
   }, [code, update]);
 
-  async function enter(input?: string) {
+  async function enter(input?: string, takeSeat = false) {
     if (moving.current) return;
     const code = input?.trim().toLowerCase();
     if (input !== undefined && !/^[a-f0-9]{12}$/.test(code ?? '')) {
@@ -78,10 +79,13 @@ export function useRoom() {
     setBusy(true);
     setError('');
     try {
-      const token = code && sessionStorage.getItem(`set-room:${code}`);
-      const next = await post<RoomSession>(code ? `/api/rooms/${code}/join` : '/api/rooms', { token });
-      sessionStorage.setItem(`set-room:${next.code}`, next.token);
-      setSession(next);
+      const saved = code && sessionStorage.getItem(`set-room:${code}`);
+      const token = saved === spectatorMark ? null : saved;
+      const spectate = saved === spectatorMark && !takeSeat;
+      const next = await post<RoomSession>(code ? `/api/rooms/${code}/join` : '/api/rooms', { token, spectate });
+      sessionStorage.setItem(`set-room:${next.code}`, next.token ?? spectatorMark);
+      setSession(current => current?.code === next.code && current.room.version > next.room.version
+        ? { ...next, room: current.room } : next);
     } catch (error) {
       setError(error instanceof RoomError ? error.message : offline);
     } finally {
@@ -91,15 +95,21 @@ export function useRoom() {
   }
 
   async function move(action: Move, cards: number[] = []) {
-    if (!session || moving.current) return;
+    if (!session || moving.current || (!session.token && action !== 'leave')) return;
     moving.current = true;
     setBusy(true);
     setError('');
     try {
-      const { room } = await post<{ room: RoomState }>(`/api/rooms/${session.code}/${action}`, {
-        token: session.token, boardVersion: session.room.boardVersion, cards,
-      });
-      update(room);
+      if (session.token) {
+        const { room } = await post<{ room: RoomState }>(`/api/rooms/${session.code}/${action}`, {
+          token: session.token, boardVersion: session.room.boardVersion, cards,
+        });
+        if (action !== 'leave') update(room);
+      }
+      if (action === 'leave') {
+        sessionStorage.removeItem(`set-room:${session.code}`);
+        location.assign('/');
+      }
     } catch (error) {
       if (error instanceof RoomError && error.room) update(error.room);
       setError(error instanceof RoomError ? error.message : offline);

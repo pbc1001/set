@@ -12,13 +12,17 @@ export interface Room {
   returnToLobbyAt?: number;
 }
 
-export function returnToLobby(room: Room) {
-  if (!room.game?.finished || (room.returnToLobbyAt ?? 0) > Date.now()) return false;
-
+function clearGame(room: Room) {
   room.game = null;
   room.event = { added: 0 };
   delete room.returnToLobbyAt;
   room.boardVersion++;
+}
+
+export function returnToLobby(room: Room) {
+  if (!room.game?.finished || (room.returnToLobbyAt ?? 0) > Date.now()) return false;
+
+  clearGame(room);
   room.version++;
   return true;
 }
@@ -34,13 +38,17 @@ export function snapshot(room: Room): RoomState {
 }
 
 function addPlayer(room: Room) {
-  const player = { id: room.players.length + 1, token: crypto.randomUUID(), score: 0 };
+  let id = 1;
+  while (room.players.some(member => member.id === id)) id++;
+  const player = { id, token: crypto.randomUUID(), score: 0 };
   room.players.push(player);
   return player;
 }
 
-function session(code: string, room: Room, player: Member): RoomSession {
-  return { code, id: player.id, token: player.token, room: snapshot(room) };
+function session(code: string, room: Room, player?: Member): RoomSession {
+  const state = snapshot(room);
+  return player ? { code, room: state, id: player.id, token: player.token }
+    : { code, room: state, id: null, token: null };
 }
 
 export function createRoom(code: string) {
@@ -48,7 +56,7 @@ export function createRoom(code: string) {
   return { room, session: session(code, room, addPlayer(room)) };
 }
 
-export const roomPath = /^\/api\/rooms\/([a-f0-9]{12})\/(join|start|reset|claim|state|live)$/;
+export const roomPath = /^\/api\/rooms\/([a-f0-9]{12})\/(join|start|reset|claim|leave|state|live)$/;
 export const missingRoom = { error: '이 코드의 방을 찾을 수 없어요.' };
 
 export function parseBody(text: string) {
@@ -68,13 +76,24 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
 
   if (action === 'join') {
     if (player) return { status: 200, body: session(code, room, player), changed: false };
-    if (room.players.length >= MAX_ROOM_PLAYERS) return error(409, `방이 가득 찼어요. 최대 ${MAX_ROOM_PLAYERS}명까지 입장할 수 있어요.`);
+    if (room.game || room.players.length >= MAX_ROOM_PLAYERS || body.spectate === true) {
+      return { status: 200, body: session(code, room), changed: false };
+    }
     const guest = addPlayer(room);
     room.version++;
     return { status: 200, body: session(code, room, guest), changed: true };
   }
 
-  if (!player) return error(403, '방에 다시 입장해 주세요.');
+  if (action === 'leave') {
+    if (player) {
+      room.players.splice(room.players.indexOf(player), 1);
+      if (!room.players.length && room.game) clearGame(room);
+      room.version++;
+    }
+    return { status: 200, body: { room: snapshot(room) }, changed: Boolean(player) };
+  }
+
+  if (!player) return error(403, '플레이어로 참가해야 게임을 조작할 수 있어요.');
   if (body.boardVersion !== room.boardVersion) return error(409, '보드가 바뀌었어요. 새 조합을 찾아보세요.', true);
   if ((action === 'start') !== !room.game) {
     return error(409, room.game ? '이미 게임이 시작됐어요.' : '아직 게임을 시작하지 않았어요.', true);
@@ -82,7 +101,7 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
   if (room.game?.finished) return error(409, '게임이 끝났어요. 잠시 후 대기실로 돌아가요.', true);
 
   if (action === 'start' || action === 'reset') {
-    if (player.id !== 1) return error(403, '방장만 게임을 시작할 수 있어요.');
+    if (player.id !== room.players[0].id) return error(403, '방장만 게임을 시작할 수 있어요.');
     Object.assign(room, createGame());
     for (const member of room.players) member.score = 0;
   } else {
