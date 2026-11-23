@@ -9,10 +9,11 @@ interface Props {
   version: number;
   pending: boolean;
   message: string;
+  returnsToLobby: boolean;
   claim: (positions: number[]) => void;
 }
 
-export function GameBoard({ play, version, pending, message, claim }: Props) {
+export function GameBoard({ play, version, pending, message, returnsToLobby, claim }: Props) {
   const [display, setDisplay] = useState(play);
   const [selected, setSelected] = useState<number[]>([]);
   const [burst, setBurst] = useState<number[]>([]);
@@ -109,7 +110,7 @@ export function GameBoard({ play, version, pending, message, claim }: Props) {
     </div>}
     {display.finished ? <div className="game-result" role="status">
       <strong>게임 종료</strong>
-      <span>SET {display.found}개를 찾았어요. {hasCards ? '남은 카드에 가능한 SET이 없어요.' : '모든 카드를 사용했어요.'}</span>
+      <span>SET {display.found}개를 찾았어요. {hasCards ? '남은 카드에 가능한 SET이 없어요.' : '모든 카드를 사용했어요.'}{returnsToLobby && ' 잠시 후 대기실로 돌아가요.'}</span>
     </div> : <div className="table-bar table-foot">
       <p role="status">{selected.length ? `카드 ${3 - selected.length}장을 더 선택하세요.` : message}</p>
       <button type="button" className="text-button" disabled={!selected.length} onClick={() => setSelected([])}><kbd>ESC</kbd> 선택 해제</button>

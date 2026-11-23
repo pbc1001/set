@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { WebSocket, WebSocketServer } from 'ws';
-import { applyRoomAction, createRoom, missingRoom, parseBody, roomPath, snapshot, type Room } from './room.ts';
+import { applyRoomAction, createRoom, missingRoom, parseBody, returnToLobby, roomPath, snapshot, type Room } from './room.ts';
 
 const databasePath = process.env.SET_DB_PATH || '.data/set-lab.sqlite';
 if (databasePath !== ':memory:') mkdirSync(dirname(databasePath), { recursive: true });
@@ -13,14 +13,30 @@ db.exec('CREATE TABLE IF NOT EXISTS rooms (code TEXT PRIMARY KEY, state TEXT NOT
 const allowedOrigins = new Set(['http://127.0.0.1:5173', 'http://localhost:5173', ...(process.env.SET_WEB_ORIGINS ?? '').split(',').map(origin => origin.trim()).filter(Boolean)]);
 const channels = new Map<string, Set<WebSocket>>();
 const sockets = new WebSocketServer({ noServer: true, maxPayload: 1024 });
+const pendingLobbyReturns = new Set<string>();
+
+function scheduleLobbyReturn(code: string, deadline: number | undefined) {
+  if (deadline === undefined || pendingLobbyReturns.has(code)) return;
+  pendingLobbyReturns.add(code);
+  setTimeout(() => {
+    pendingLobbyReturns.delete(code);
+    readRoom(code);
+  }, Math.max(0, deadline - Date.now())).unref();
+}
+
 function readRoom(code: string): Room | null {
   const row = db.prepare('SELECT state FROM rooms WHERE code = ?').get(code);
-  return row ? JSON.parse(String(row.state)) : null;
+  if (!row) return null;
+  const room: Room = JSON.parse(String(row.state));
+  if (returnToLobby(room)) saveRoom(code, room);
+  else scheduleLobbyReturn(code, room.returnToLobbyAt);
+  return room;
 }
 
 function saveRoom(code: string, room: Room) {
   db.prepare('INSERT INTO rooms (code, state) VALUES (?, ?) ON CONFLICT(code) DO UPDATE SET state = excluded.state')
     .run(code, JSON.stringify(room));
+  scheduleLobbyReturn(code, room.returnToLobbyAt);
   const clients = channels.get(code);
   if (!clients?.size) return;
   const message = JSON.stringify(snapshot(room));

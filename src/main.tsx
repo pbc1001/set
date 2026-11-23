@@ -127,7 +127,7 @@ function App() {
     <Global styles={styles} />
     <header className="topbar"><div className="shell topbar-inner">
       <a href="/" className="brand" aria-label="SET LAB 홈"><b aria-hidden="true">✦</b><span>SET<span>LAB</span></span></a>
-      {page === 'play' && (!session || session.id === 1) && <button type="button" className="small-button" disabled={busy} onClick={() => {
+      {page === 'play' && (!session || session.id === 1) && <button type="button" className="small-button" disabled={busy || Boolean(session && play.finished)} onClick={() => {
         if (session) void move('reset');
         else { setSolo({ ...createGame(), version: solo.version + 1 }); setSoloError(''); }
       }}>새 게임</button>}
@@ -158,7 +158,7 @@ function App() {
         {error && <p className="notice" role="status">{error}</p>}
       </Panel>}
       {page === 'play' && <div className="play-layout">
-        <GameBoard key={session?.code ?? 'solo'} play={play} version={version} pending={busy} message={error || soloError || message} claim={claim} />
+        <GameBoard key={session?.code ?? 'solo'} play={play} version={version} pending={busy} message={error || soloError || message} returnsToLobby={Boolean(session)} claim={claim} />
         <aside className="play-details" aria-label="게임 정보">
           {session && <Roster players={session.room.players} me={session.id} scores />}
           <div className="play-tools">

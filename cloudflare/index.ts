@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { applyRoomAction, createRoom, missingRoom, parseBody, roomPath, snapshot, type Room as RoomData } from '../server/room.ts';
+import { applyRoomAction, createRoom, missingRoom, parseBody, returnToLobby, roomPath, snapshot, type Room as RoomData } from '../server/room.ts';
 
 interface Env {
   ROOMS: DurableObjectNamespace<Room>;
@@ -28,6 +28,29 @@ async function readBody(request: Request) {
 }
 
 export class Room extends DurableObject<Env> {
+  private broadcast(room: RoomData) {
+    const message = JSON.stringify(snapshot(room));
+    for (const socket of this.ctx.getWebSockets()) {
+      if (socket.readyState === WebSocket.OPEN) socket.send(message);
+    }
+  }
+
+  private async readRoom() {
+    const update = await this.ctx.storage.transaction(async tx => {
+      const room = await tx.get<RoomData>('room');
+      if (!room) return null;
+      const returned = returnToLobby(room);
+      if (returned) await tx.put('room', room);
+      return { room, returned };
+    });
+    if (update?.returned) this.broadcast(update.room);
+    return update?.room;
+  }
+
+  async alarm() {
+    await this.readRoom();
+  }
+
   async fetch(request: Request) {
     const [, , , code, action] = new URL(request.url).pathname.split('/');
 
@@ -43,7 +66,7 @@ export class Room extends DurableObject<Env> {
 
     if (action === 'live' || action === 'state') {
       if (request.method !== 'GET') return unsupported();
-      const room = await this.ctx.storage.get<RoomData>('room');
+      const room = await this.readRoom();
       if (!room) return json(missingRoom, 404);
       if (action === 'state') return json({ room: snapshot(room) });
       if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return unsupported();
@@ -61,18 +84,19 @@ export class Room extends DurableObject<Env> {
     const update = await this.ctx.storage.transaction(async tx => {
       const room = await tx.get<RoomData>('room');
       if (!room) return null;
+      const returned = returnToLobby(room);
+      const previousDeadline = room.returnToLobbyAt;
       const result = applyRoomAction(room, code, action, body);
-      if (result.changed) await tx.put('room', room);
-      return { result, room };
+      const changed = returned || result.changed;
+      if (changed) await tx.put('room', room);
+      if (room.returnToLobbyAt !== undefined && room.returnToLobbyAt !== previousDeadline) {
+        await tx.setAlarm(room.returnToLobbyAt);
+      }
+      return { result, room, changed };
     });
     if (!update) return json(missingRoom, 404);
 
-    if (update.result.changed) {
-      const message = JSON.stringify(snapshot(update.room));
-      for (const socket of this.ctx.getWebSockets()) {
-        if (socket.readyState === WebSocket.OPEN) socket.send(message);
-      }
-    }
+    if (update.changed) this.broadcast(update.room);
     return json(update.result.body, update.result.status);
   }
 }

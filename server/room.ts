@@ -1,12 +1,26 @@
 import { MAX_ROOM_PLAYERS, createGame, isSet, replaceSet, type Game, type GameEvent, type Player, type RoomSession, type RoomState } from '../shared/game.ts';
 
 type Member = Player & { token: string };
+const RESULTS_DURATION_MS = 4_000;
+
 export interface Room {
   version: number;
   boardVersion: number;
   players: Member[];
   game: Game | null;
   event: GameEvent;
+  returnToLobbyAt?: number;
+}
+
+export function returnToLobby(room: Room) {
+  if (!room.game?.finished || (room.returnToLobbyAt ?? 0) > Date.now()) return false;
+
+  room.game = null;
+  room.event = { added: 0 };
+  delete room.returnToLobbyAt;
+  room.boardVersion++;
+  room.version++;
+  return true;
 }
 
 export function snapshot(room: Room): RoomState {
@@ -65,6 +79,7 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
   if ((action === 'start') !== !room.game) {
     return error(409, room.game ? '이미 게임이 시작됐어요.' : '아직 게임을 시작하지 않았어요.', true);
   }
+  if (room.game?.finished) return error(409, '게임이 끝났어요. 잠시 후 대기실로 돌아가요.', true);
 
   if (action === 'start' || action === 'reset') {
     if (player.id !== 1) return error(403, '방장만 게임을 시작할 수 있어요.');
@@ -76,13 +91,13 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
     if (!Array.isArray(cards) || cards.length !== 3 || new Set(cards).size !== 3 || !cards.every(Number.isInteger)) {
       return error(400, '서로 다른 카드 세 장을 선택하세요.');
     }
-    if (game.finished) return error(409, '게임이 끝났어요.');
     const positions = cards.map(id => game.slots.findIndex(card => card?.id === id));
     const [first, second, third] = positions.map(position => game.slots[position]);
     if (!first || !second || !third) return error(409, '카드가 바뀌었어요.', true);
     if (!isSet(first, second, third)) return error(422, 'SET이 아니에요. 다른 세 장을 골라 보세요.');
     room.event = { added: replaceSet(game, positions), player: player.id, positions };
     player.score++;
+    if (game.finished) room.returnToLobbyAt = Date.now() + RESULTS_DURATION_MS;
   }
 
   room.boardVersion++;
