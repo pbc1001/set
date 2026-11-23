@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import { practiceAction, practicePath } from '../server/practice.ts';
 import { applyRoomAction, createRoom, missingRoom, parseBody, returnToLobby, roomPath, snapshot, type Room as RoomData } from '../server/room.ts';
 
 interface Env {
@@ -52,7 +53,15 @@ export class Room extends DurableObject<Env> {
   }
 
   async fetch(request: Request) {
-    const [, , , code, action] = new URL(request.url).pathname.split('/');
+    const path = new URL(request.url).pathname;
+    const practice = practicePath.exec(path);
+    if (practice) {
+      const body = request.method === 'POST' ? await readBody(request) : null;
+      const storage = this.ctx.storage;
+      const result = storage.transactionSync(() => practiceAction(practice, request.method, body, storage.kv));
+      return json(result.body, result.status);
+    }
+    const [, , , code, action] = path.split('/');
 
     if (action === 'create') {
       const created = await this.ctx.storage.transaction(async tx => {
@@ -104,6 +113,7 @@ export class Room extends DurableObject<Env> {
 async function route(request: Request, env: Env) {
   const url = new URL(request.url);
   if (url.pathname === '/api/health' && request.method === 'GET') return json({ online: true });
+  if (practicePath.test(url.pathname)) return env.ROOMS.getByName('practice').fetch(request);
   if (url.pathname === '/api/rooms') {
     if (request.method !== 'POST') return unsupported();
     if (!await readBody(request)) return json({ error: '요청을 읽을 수 없어요.' }, 400);

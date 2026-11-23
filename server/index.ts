@@ -4,12 +4,23 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { WebSocket, WebSocketServer } from 'ws';
+import { practiceAction, practicePath, type PracticeStorage } from './practice.ts';
 import { applyRoomAction, createRoom, missingRoom, parseBody, returnToLobby, roomPath, snapshot, type Room } from './room.ts';
 
 const databasePath = process.env.SET_DB_PATH || '.data/set-lab.sqlite';
 if (databasePath !== ':memory:') mkdirSync(dirname(databasePath), { recursive: true });
 const db = new DatabaseSync(databasePath);
 db.exec('CREATE TABLE IF NOT EXISTS rooms (code TEXT PRIMARY KEY, state TEXT NOT NULL)');
+db.exec('CREATE TABLE IF NOT EXISTS practice (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+const getPractice = db.prepare('SELECT value FROM practice WHERE key = ?');
+const putPractice = db.prepare('INSERT INTO practice (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+const practiceStorage: PracticeStorage = {
+  get(key) {
+    const row = getPractice.get(key);
+    return row ? JSON.parse(String(row.value)) : undefined;
+  },
+  put(key, value) { putPractice.run(key, JSON.stringify(value)); },
+};
 const allowedOrigins = new Set(['http://127.0.0.1:5173', 'http://localhost:5173', ...(process.env.SET_WEB_ORIGINS ?? '').split(',').map(origin => origin.trim()).filter(Boolean)]);
 const channels = new Map<string, Set<WebSocket>>();
 const sockets = new WebSocketServer({ noServer: true, maxPayload: 1024 });
@@ -73,9 +84,24 @@ const server = createServer(async (request, response) => {
   const path = request.url?.split('?')[0] ?? '';
   if (path === '/api/health' && request.method === 'GET') return reply(response, 200, { online: true });
   const route = roomPath.exec(path);
-  if (!route && path !== '/api/rooms') return reply(response, 404, { error: '페이지를 찾을 수 없어요.' });
+  const practice = practicePath.exec(path);
+  if (!route && !practice && path !== '/api/rooms') return reply(response, 404, { error: '페이지를 찾을 수 없어요.' });
 
   try {
+    if (practice) {
+      const method = request.method ?? '';
+      const body = method === 'POST' ? await readBody(request) : null;
+      let result: ReturnType<typeof practiceAction>;
+      db.exec('BEGIN');
+      try {
+        result = practiceAction(practice, method, body, practiceStorage);
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+      return reply(response, result.status, result.body);
+    }
     if (route?.[2] === 'state' && request.method === 'GET') {
       const room = readRoom(route[1]);
       return room ? reply(response, 200, { room: snapshot(room) }) : reply(response, 404, missingRoom);

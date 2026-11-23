@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Global } from '@emotion/react';
-import { MAX_ROOM_PLAYERS, createGame, isSet, replaceSet, type Game, type GameEvent, type Player } from '../shared/game';
+import { MAX_ROOM_PLAYERS, type Player } from '../shared/game';
 import { CardArt } from './CardArt';
-import { GameBoard, type Play } from './GameBoard';
+import { GameBoard } from './GameBoard';
+import { HallOfFame, Practice } from './Practice';
 import { Action, styles } from './styles';
 import { useRoom } from './room';
 
@@ -22,7 +23,10 @@ function Home() {
         <Action href="/create">방 만들기</Action>
         <Action href="/join" data-secondary>코드로 입장</Action>
       </div>
-      <a className="quiet" href="/play">혼자 연습하기 <span aria-hidden="true">↗</span></a>
+      <nav className="play-tools" aria-label="연습 메뉴">
+        <a className="quiet" href="/play">혼자 연습하기 <span aria-hidden="true">↗</span></a>
+        <a className="quiet" href="/records">명예의 전당</a>
+      </nav>
     </div>
     <div className="hero-art" aria-hidden="true">
       <div className="hero-disc" />
@@ -84,17 +88,11 @@ function Rules() {
   </details>;
 }
 
-const playable = (game: Game, event: GameEvent): Play => ({ slots: game.slots, cardsLeft: game.deck.length, found: game.found, finished: game.finished, event });
-
 function App() {
   const { session, online, busy, error, enter, move } = useRoom();
   const [code, setCode] = useState(invited ?? '');
-  const [solo, setSolo] = useState(() => ({ ...createGame(), version: 0 }));
-  const [soloError, setSoloError] = useState('');
   const page = session ? session.room.play ? 'play' : 'lobby' : initialPage === 'lobby' ? 'join' : initialPage;
-  const practice = useMemo(() => playable(solo.game, solo.event), [solo]);
-  const play = session?.room.play ?? practice;
-  const version = session?.room.boardVersion ?? solo.version;
+  const play = session?.room.play;
   const spectator = session?.id === null;
   const isHost = Boolean(session && session.id === session.room.players[0]?.id);
   const leaveButton = <button className="quiet leave-button" type="button" disabled={busy} onClick={() => void move('leave')}>나가기</button>;
@@ -106,25 +104,8 @@ function App() {
     document.querySelector('main h1')?.scrollIntoView({ block: 'nearest' });
   }, [page, session?.code]);
 
-  function claim(positions: number[]) {
-    const cards = positions.map(position => play.slots[position]!);
-    if (session) {
-      void move('claim', cards.map(card => card.id));
-      return;
-    }
-    if (!isSet(cards[0], cards[1], cards[2])) {
-      setSoloError('SET이 아니에요. 다른 세 장을 골라 보세요.');
-      return;
-    }
-    const game = { ...solo.game, slots: [...solo.game.slots], deck: [...solo.game.deck] };
-    const added = replaceSet(game, positions);
-    setSolo({ game, event: { added, positions, player: 1 }, version: solo.version + 1 });
-    setSoloError('');
-  }
-
-  const extra = play.event.added ? ` 가능한 SET이 없어 카드 ${play.event.added}장을 더 열었어요.` : '';
-  const message = play.event.player
-    ? `${session ? `플레이어 ${play.event.player}의 SET!` : 'SET 성공!'}${extra}` : extra.trim();
+  const extra = play?.event.added ? ` 가능한 SET이 없어 카드 ${play.event.added}장을 더 열었어요.` : '';
+  const message = play?.event.player ? `플레이어 ${play.event.player}의 SET!${extra}` : extra.trim();
 
   return <>
     <Global styles={styles} />
@@ -135,13 +116,11 @@ function App() {
           void move('leave');
         }
       }}><b aria-hidden="true">✦</b><span>SET<span>LAB</span></span></a>
-      {page === 'play' && (!session || isHost) && <button type="button" className="small-button" disabled={busy || Boolean(session && play.finished)} onClick={() => {
-        if (session) void move('reset');
-        else { setSolo({ ...createGame(), version: solo.version + 1 }); setSoloError(''); }
-      }}>새 게임</button>}
+      {play && isHost && <button type="button" className="small-button" disabled={busy || play.finished} onClick={() => void move('reset')}>새 게임</button>}
     </div></header>
     <main className="shell">
       {page === 'home' && <Home />}
+      {page === 'records' && <Panel title="명예의 전당"><HallOfFame /></Panel>}
       {page === 'create' && <Panel title="새 방 만들기">
         <p>대기실에서 초대 링크를 공유하고 게임을 시작하세요.</p>
         <Action as="button" type="button" disabled={busy} onClick={() => void enter()}>{busy ? '방을 만드는 중…' : '방 만들기'}</Action>
@@ -170,20 +149,20 @@ function App() {
         {!isHost && !spectator && <p className="notice" role="status">방장이 시작하면 자동으로 이동해요.</p>}
         {error && <p className="notice" role="status">{error}</p>}
       </Panel>}
-      {page === 'play' && <div className="play-layout">
-        <GameBoard key={session?.code ?? 'solo'} play={play} version={version} pending={busy} spectator={spectator} message={error || soloError || message} returnsToLobby={Boolean(session)} claim={claim} />
+      {page === 'play' && !session && <Practice><Rules /></Practice>}
+      {session && play && <div className="play-layout">
+        <GameBoard key={session.code} play={play} version={session.room.boardVersion} pending={busy} spectator={spectator} message={error || message} returnsToLobby
+          claim={positions => void move('claim', positions.flatMap(position => play.slots[position]?.id ?? []))} />
         <aside className="play-details" aria-label="게임 정보">
-          {session && <Roster players={session.room.players} me={session.id} scores />}
+          <Roster players={session.room.players} me={session.id} scores />
           <div className="play-tools">
             <Rules />
-            {session && <>
-              <details className="play-detail">
-                <summary>방 정보</summary>
-                <RoomInvite code={session.code} />
-              </details>
-              <Connection online={online} />
-              {leaveButton}
-            </>}
+            <details className="play-detail">
+              <summary>방 정보</summary>
+              <RoomInvite code={session.code} />
+            </details>
+            <Connection online={online} />
+            {leaveButton}
           </div>
         </aside>
       </div>}

@@ -1,20 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
-import { INITIAL_SIZE, keyAt, type RoomState } from '../shared/game';
+import { INITIAL_SIZE, keyAt, type Play } from '../shared/game';
 import { CardArt, describeCard } from './CardArt';
-
-export type Play = NonNullable<RoomState['play']>;
 
 interface Props {
   play: Play;
   version: number;
   pending: boolean;
   spectator: boolean;
+  practice?: boolean;
   message: string;
   returnsToLobby: boolean;
   claim: (positions: number[]) => void;
 }
 
-export function GameBoard({ play, version, pending, spectator, message, returnsToLobby, claim }: Props) {
+export function GameBoard({ play, version, pending, spectator, practice, message, returnsToLobby, claim }: Props) {
   const [display, setDisplay] = useState(play);
   const [selected, setSelected] = useState<number[]>([]);
   const [burst, setBurst] = useState<number[]>([]);
@@ -42,7 +41,8 @@ export function GameBoard({ play, version, pending, spectator, message, returnsT
     }, 485);
     const end = window.setTimeout(() => setCelebrating(false), 790);
     return () => { window.clearTimeout(replacement); window.clearTimeout(end); };
-  }, [play, version]);
+    // The board revision owns the animation, including while a name is saved.
+  }, [version]);
 
   const locked = spectator || pending || burst.length > 0 || display.finished;
   const hasCards = display.slots.some(card => card !== null);
@@ -63,7 +63,7 @@ export function GameBoard({ play, version, pending, spectator, message, returnsT
   }
 
   useEffect(() => {
-    if (spectator) return;
+    if (spectator || pending) return;
     const shortcut = (event: KeyboardEvent) => {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.target instanceof HTMLInputElement) return;
       if (event.key === 'Escape') {
@@ -83,7 +83,7 @@ export function GameBoard({ play, version, pending, spectator, message, returnsT
 
   return <section className="table" aria-labelledby="board-title">
     <div className="table-bar board-heading">
-      <h1 id="board-title">게임 보드</h1>
+      <h1 id="board-title">{practice ? '무한 연습' : '게임 보드'}</h1>
       <dl className="board-stats">
         <div><dt>찾은 SET</dt><dd>{play.found}</dd></div>
         <div><dt>남은 덱</dt><dd>{play.cardsLeft}</dd></div>

@@ -1,4 +1,4 @@
-import { MAX_ROOM_PLAYERS, createGame, isSet, replaceSet, type Game, type GameEvent, type Player, type RoomSession, type RoomState } from '../shared/game.ts';
+import { MAX_ROOM_PLAYERS, boardView, createGame, isSet, replaceSet, type Game, type GameEvent, type Player, type RoomSession, type RoomState } from '../shared/game.ts';
 
 type Member = Player & { token: string };
 const RESULTS_DURATION_MS = 4_000;
@@ -33,7 +33,7 @@ export function snapshot(room: Room): RoomState {
     version: room.version,
     boardVersion: room.boardVersion,
     players: room.players.map(({ id, score }) => ({ id, score })),
-    play: game && { slots: game.slots, found: game.found, finished: game.finished, cardsLeft: game.deck.length, event },
+    play: game && boardView(game, event),
   };
 }
 

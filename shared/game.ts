@@ -20,17 +20,23 @@ export interface Board {
 
 export interface Game extends Board { deck: Card[] }
 export interface Player { id: number; score: number }
-export interface GameEvent { added: number; player?: number; positions?: number[] }
+export interface GameEvent { added: number; player?: number; positions?: number[]; newDeck?: boolean }
+export interface Play extends Board { cardsLeft: number; event: GameEvent }
 export interface RoomState {
   version: number;
   boardVersion: number;
   players: Player[];
-  play: (Board & { cardsLeft: number; event: GameEvent }) | null;
+  play: Play | null;
 }
 export type RoomSession = { code: string; room: RoomState } & (
   { id: number; token: string } | { id: null; token: null }
 );
 export type Move = 'start' | 'reset' | 'claim' | 'leave';
+
+export function boardView(game: Game, event: GameEvent): Play {
+  const { slots, found, finished, deck } = game;
+  return { slots, found, finished, cardsLeft: deck.length, event };
+}
 
 export function keyAt(position: number) {
   if (position < INITIAL_SIZE) return columns[position % 4][Math.floor(position / 4)];

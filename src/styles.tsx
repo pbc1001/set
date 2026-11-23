@@ -87,6 +87,17 @@ export const styles = css`
   .roster { list-style: none; padding: 0; margin: 9px 0 14px; max-height: 220px; overflow: auto; }
   .roster li { display: flex; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .875rem; }
   .roster strong { color: var(--accent); }
+  .record-list { margin: 18px 0; padding-inline-start: 1.65rem; }
+  .record-list li { padding: 8px 0 8px 4px; border-bottom: 1px solid var(--line); }
+  .record-list li::marker, .record-list strong { color: var(--accent); font-weight: 750; }
+  .record-list li strong { float: inline-end; margin-inline-start: 10px; }
+  .record-list li span { overflow-wrap: anywhere; }
+  .record-dialog { width: min(calc(100% - 32px), 432px); padding: clamp(16px, 5vw, 26px); border: 1px solid var(--line-strong); border-radius: 16px; color: var(--ink); background: var(--surface); }
+  .record-dialog::backdrop { background: #070b11a8; }
+  .record-dialog h2 { font-size: 1.5rem; color: var(--accent); }
+  .record-dialog p { margin-block: 8px 15px; color: var(--muted); }
+  .record-dialog input { margin-top: 4px; }
+  .record-dialog .actions { margin: 12px 0 0; }
   .connection { display: inline-flex; align-items: center; gap: 6px; padding: 2px 7px; border: 1px solid var(--line-strong); border-radius: 99px; color: var(--muted); font-size: .8125rem; white-space: nowrap; }
   .connection[data-online='true'] { color: var(--accent); border-color: #416762; background: #223936; }
   .connection[data-online='true']::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
@@ -135,6 +146,9 @@ export const styles = css`
   .play-details .compact-roster { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 7px; }
   .play-details .compact-roster li { gap: 6px; padding: 2px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: .8125rem; }
   .play-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+  .practice-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--muted); font-size: .875rem; }
+  .practice-toolbar strong { color: var(--accent); }
+  .practice-toolbar button { margin-inline-start: auto; }
   .play-detail { min-width: 0; font-size: .875rem; }
   .play-detail[open] { flex: 1 0 100%; padding: 0 10px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
   .play-detail summary { padding: 4px 0; cursor: pointer; color: var(--muted); font-weight: 700; }
