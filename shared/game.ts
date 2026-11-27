@@ -2,6 +2,7 @@ export const INITIAL_SIZE = 12;
 export const DECK_SIZE = 81;
 export const MAX_ROOM_PLAYERS = 4;
 export const PLAYER_NAME_LIMIT = 20;
+export const RACE_TARGET = 30;
 const attributes = ['count', 'color', 'shape', 'fill'] as const;
 const columns = ['QAZ', 'WSX', 'EDC', 'RFV', 'TGB', 'YHN', 'UJM'];
 
@@ -23,19 +24,21 @@ export interface Game extends Board { deck: Card[] }
 export interface Player { id: number; score: number; name?: string }
 export interface GameEvent { added: number; player?: number; playerName?: string; positions?: number[]; newDeck?: boolean }
 export interface PlayerSelection { player: number; cards: number[] }
+export type RoomMode = 'classic' | 'race';
 export interface Play extends Board { cardsLeft: number; event: GameEvent }
 export interface RoomState {
   version: number;
   boardVersion: number;
   players: Player[];
   play: Play | null;
+  mode?: RoomMode;
   roundResult?: Player[];
   selections?: PlayerSelection[];
 }
 export type RoomSession = { code: string; room: RoomState } & (
   { id: number; token: string } | { id: null; token: null }
 );
-export type Move = 'start' | 'reset' | 'claim' | 'leave';
+export type Move = 'start' | 'reset' | 'claim' | 'leave' | 'mode';
 
 export function normalizePlayerName(name: unknown) {
   if (typeof name !== 'string') return null;
@@ -105,4 +108,13 @@ export function replaceSet(game: Game, positions: number[]) {
     for (const position of positions) game.slots[position] = game.deck.pop() ?? null;
   }
   return ensurePlayable(game);
+}
+
+export function replaceEndlessSet(game: Game, positions: number[]) {
+  const added = replaceSet(game, positions);
+  if (!game.finished) return { added, positions };
+
+  const { game: next, event } = createGame();
+  Object.assign(game, next, { found: game.found });
+  return { ...event, positions, newDeck: true };
 }

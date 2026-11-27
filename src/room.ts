@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { normalizePlayerName, PLAYER_NAME_LIMIT, type Move, type RoomSession, type RoomState } from '../shared/game';
+import { normalizePlayerName, PLAYER_NAME_LIMIT, type Move, type RoomMode, type RoomSession, type RoomState } from '../shared/game';
 
 const apiOrigin = import.meta.env.VITE_API_ORIGIN || (import.meta.env.DEV ? location.origin : '');
 const offline = '게임 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.';
@@ -134,7 +134,7 @@ export function useRoom() {
     }
   }
 
-  async function move(action: Move, cards: number[] = []) {
+  async function move(action: Move, detail: { cards?: number[]; mode?: RoomMode } = {}) {
     if (!session || moving.current || (!session.token && action !== 'leave')) return;
     moving.current = true;
     setBusy(true);
@@ -142,7 +142,7 @@ export function useRoom() {
     try {
       if (session.token) {
         const { room } = await post<{ room: RoomState }>(`/api/rooms/${session.code}/${action}`, {
-          token: session.token, boardVersion: session.room.boardVersion, cards,
+          token: session.token, boardVersion: session.room.boardVersion, ...detail,
         });
         if (action !== 'leave') update(room);
       }

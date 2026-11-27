@@ -74,6 +74,14 @@ export const styles = css`
   .route-panel h1 { margin: 13px 0 10px; font-size: clamp(1.9rem, 5vw, 2.55rem); letter-spacing: -.07em; }
   .route-panel p { margin: 10px 0 17px; color: var(--muted); word-break: keep-all; }
   .route-panel > button:not(.leave-button) { width: 100%; }
+  .mode-settings { min-width: 0; margin: 0 0 14px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
+  .mode-settings h2 { margin-bottom: 6px; }
+  .mode-settings legend { padding-inline: 4px; font-size: .94rem; font-weight: 750; }
+  .mode-settings small { display: block; color: var(--muted); font-size: .79rem; word-break: keep-all; }
+  .mode-options { display: grid; gap: 6px; }
+  .mode-options label { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+  .mode-options label:has(:checked) { border-color: #598879; background: #223936; }
+  .mode-options input { flex: none; width: auto; accent-color: var(--accent); }
   .invite { display: flex; align-items: center; gap: 8px; }
   .join-form { display: grid; gap: 10px; }
   .room-field { display: grid; gap: 4px; color: var(--muted); font-size: .875rem; }

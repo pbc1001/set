@@ -1,4 +1,4 @@
-import { MAX_ROOM_PLAYERS, PLAYER_NAME_LIMIT, boardView, createGame, isSet, normalizePlayerName, playerName, replaceSet, type Game, type GameEvent, type Player, type RoomSession, type RoomState } from '../shared/game.ts';
+import { MAX_ROOM_PLAYERS, PLAYER_NAME_LIMIT, RACE_TARGET, boardView, createGame, isSet, normalizePlayerName, playerName, replaceEndlessSet, replaceSet, type Game, type GameEvent, type Player, type RoomMode, type RoomSession, type RoomState } from '../shared/game.ts';
 
 type Member = Player & { token: string; selected?: number[] };
 const RESULTS_DURATION_MS = 4_000;
@@ -8,6 +8,7 @@ export interface Room {
   boardVersion: number;
   players: Member[];
   game: Game | null;
+  mode?: RoomMode;
   event: GameEvent;
   returnToLobbyAt?: number;
   roundResult?: Player[];
@@ -47,6 +48,7 @@ export function snapshot(room: Room): RoomState {
     players: room.players.map(publicPlayer),
     selections: room.players.flatMap(({ id, selected }) => selected?.length ? [{ player: id, cards: selected }] : []),
     play: game && boardView(game, event),
+    mode: room.mode ?? 'classic',
     roundResult: room.roundResult,
   };
 }
@@ -73,7 +75,7 @@ export function createRoom(code: string, name?: string) {
 }
 
 export const nameError = `이름을 ${PLAYER_NAME_LIMIT}자 이내로 입력해 주세요.`;
-export const roomPath = /^\/api\/rooms\/([a-f0-9]{12})\/(join|start|reset|claim|select|leave|state|live)$/;
+export const roomPath = /^\/api\/rooms\/([a-f0-9]{12})\/(join|start|reset|claim|select|leave|mode|state|live)$/;
 export const missingRoom = { error: '이 코드의 방을 찾을 수 없어요.' };
 
 export function parseBody(text: string) {
@@ -136,6 +138,18 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
 
   if (!player) return error(403, '플레이어로 참가해야 게임을 조작할 수 있어요.');
   if (body.boardVersion !== room.boardVersion) return error(409, '보드가 바뀌었어요. 새 조합을 찾아보세요.', true);
+  if (action === 'mode') {
+    if (player.id !== room.players[0].id) return error(403, '방장만 게임 모드를 바꿀 수 있어요.');
+    if (room.game) return error(409, '게임 모드는 대기실에서만 바꿀 수 있어요.', true);
+    const { mode } = body;
+    if (mode !== 'classic' && mode !== 'race') return error(400, '지원하지 않는 게임 모드예요.');
+    const changed = mode !== (room.mode ?? 'classic');
+    if (changed) {
+      room.mode = mode;
+      room.version++;
+    }
+    return { status: 200, body: { room: snapshot(room) }, changed };
+  }
   if ((action === 'start') !== !room.game) {
     return error(409, room.game ? '이미 게임이 시작됐어요.' : '아직 게임을 시작하지 않았어요.', true);
   }
@@ -172,8 +186,12 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
     const [first, second, third] = positions.map(position => game.slots[position]);
     if (!first || !second || !third) return error(409, '카드가 바뀌었어요.', true);
     if (!isSet(first, second, third)) return error(422, 'SET이 아니에요. 다른 세 장을 골라 보세요.');
-    room.event = { added: replaceSet(game, positions), player: player.id, playerName: playerName(player), positions };
     player.score++;
+    const race = room.mode === 'race';
+    const reachedTarget = race && player.score >= RACE_TARGET;
+    const event = race && !reachedTarget ? replaceEndlessSet(game, positions) : { added: replaceSet(game, positions) };
+    if (reachedTarget) game.finished = true;
+    room.event = { ...event, player: player.id, playerName: playerName(player), positions };
     if (game.finished) {
       saveRoundResult(room);
       room.returnToLobbyAt = Date.now() + RESULTS_DURATION_MS;

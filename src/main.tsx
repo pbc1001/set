@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Global } from '@emotion/react';
-import { MAX_ROOM_PLAYERS, PLAYER_NAME_LIMIT, playerName, type Player } from '../shared/game';
+import { MAX_ROOM_PLAYERS, PLAYER_NAME_LIMIT, RACE_TARGET, playerName, type Player, type RoomMode } from '../shared/game';
 import { CardArt } from './CardArt';
 import { GameBoard } from './GameBoard';
 import { HallOfFame, Practice } from './Practice';
@@ -13,6 +13,11 @@ const invited = locationAtLoad.searchParams.get('room');
 const initialPage = invited ? 'join' : locationAtLoad.pathname.replace(/^\/|\/$/g, '') || 'home';
 const sample = [0, 1, 2].map(count => ({ count, color: count, shape: count, fill: count }));
 const examples = [0, 1, 2].map(count => ({ count, color: 2, shape: 0, fill: 0 }));
+const modes = {
+  classic: { title: '한 덱', description: '덱을 다 쓰고 가능한 SET이 없어지면 종료' },
+  race: { title: `무한 모드 · ${RACE_TARGET} SET 선승`, description: `덱을 이어서 사용하고, 개인 SET ${RACE_TARGET}개를 먼저 찾으면 승리` },
+};
+const roomModes = ['classic', 'race'] as const;
 
 function Home() {
   return <section className="home">
@@ -69,10 +74,24 @@ function Connection({ online }: { online: boolean }) {
   return <span className="connection" data-online={online} role="status">{online ? '실시간 연결' : '연결 중'}</span>;
 }
 
-function Roster({ players, me, scores = false }: { players: Player[]; me: number | null; scores?: boolean }) {
+function ModeSettings({ mode, busy, change }: { mode: RoomMode; busy: boolean; change?: (mode: RoomMode) => void }) {
+  if (!change) return <section className="mode-settings">
+    <h2>게임 모드</h2><strong>{modes[mode].title}</strong><small>{modes[mode].description}</small>
+  </section>;
+
+  return <fieldset className="mode-settings mode-options" disabled={busy}>
+    <legend>게임 모드</legend>
+    {roomModes.map(option => <label key={option}>
+      <input type="radio" name="game-mode" value={option} checked={mode === option} onChange={() => change(option)} />
+      <span><strong>{modes[option].title}</strong><small>{modes[option].description}</small></span>
+    </label>)}
+  </fieldset>;
+}
+
+function Roster({ players, me, scores = false, goal }: { players: Player[]; me: number | null; scores?: boolean; goal?: number }) {
   return <ul className={scores ? 'roster compact-roster' : 'roster'} aria-label={scores ? '플레이어 점수' : '참가자 목록'}>{players.map(player => <li key={player.id}>
     <span>{scores && <i className="player-color" data-player={player.id} aria-hidden="true" />}{playerName(player)}{player.id === me ? ' (나)' : ''}</span>
-    <strong>{scores ? player.score : player.id === players[0].id ? '방장' : '참가자'}</strong>
+    <strong>{scores ? <>{player.score}{goal && <small> / {goal}</small>}</> : player.id === players[0].id ? '방장' : '참가자'}</strong>
   </li>)}</ul>;
 }
 
@@ -109,6 +128,8 @@ function App() {
   const [name, setName] = useState(() => (invited && activeName(invited.toLowerCase())) || preferredName());
   const page = session ? session.room.play ? 'play' : 'lobby' : initialPage === 'lobby' ? 'join' : initialPage;
   const play = session?.room.play;
+  const mode = session?.room.mode ?? 'classic';
+  const goal = mode === 'race' ? RACE_TARGET : undefined;
   const roundResult = session?.room.roundResult;
   const spectator = session?.id === null;
   const isHost = Boolean(session && session.id === session.room.players[0]?.id);
@@ -126,7 +147,8 @@ function App() {
     document.querySelector('main h1')?.scrollIntoView({ block: 'nearest' });
   }, [page, session?.code]);
 
-  const extra = play?.event.added ? ` 가능한 SET이 없어 카드 ${play.event.added}장을 더 열었어요.` : '';
+  const extra = play?.event.newDeck ? ' 새 덱을 섞었어요.'
+    : play?.event.added ? ` 가능한 SET이 없어 카드 ${play.event.added}장을 더 열었어요.` : '';
   const finder = play?.event.playerName ?? (play?.event.player ? `플레이어 ${play.event.player}` : '');
   const message = finder ? `${finder} 님이 SET을 찾았어요!${extra}` : extra.trim();
   const remoteSelections = session?.room.selections?.flatMap(({ player, cards }) => {
@@ -179,6 +201,7 @@ function App() {
         <h2 className="roster-title">참가자 <strong>{session.room.players.length} / {MAX_ROOM_PLAYERS}명</strong></h2>
         <Roster players={session.room.players} me={session.id} />
         {!!roundResult?.length && <RoundStandings players={roundResult} title="지난 게임 결과" />}
+        <ModeSettings mode={mode} busy={busy} change={isHost ? mode => void move('mode', { mode }) : undefined} />
         {isHost && <Action as="button" type="button" disabled={busy} onClick={() => void move('start')}>게임 시작</Action>}
         {spectator && <>
           <p className="notice" role="status">관전 중</p>
@@ -191,11 +214,11 @@ function App() {
       {page === 'play' && !session && <Practice><Rules /></Practice>}
       {session && play && <div className="play-layout">
         <GameBoard key={session.code} play={play} version={session.room.boardVersion} pending={busy} spectator={spectator} message={error || message} returnsToLobby
-          finder={finder} remoteSelections={remoteSelections} select={positions => void select(positions.flatMap(position => play.slots[position]?.id ?? []))}
+          finder={finder} goal={goal} remoteSelections={remoteSelections} select={positions => void select(positions.flatMap(position => play.slots[position]?.id ?? []))}
           standings={!!roundResult?.length && <RoundStandings players={roundResult} title="최종 순위" />}
-          claim={positions => void move('claim', positions.flatMap(position => play.slots[position]?.id ?? []))} />
+          claim={positions => void move('claim', { cards: positions.flatMap(position => play.slots[position]?.id ?? []) })} />
         <aside className="play-details" aria-label="게임 정보">
-          <Roster players={session.room.players} me={session.id} scores />
+          <Roster players={session.room.players} me={session.id} scores goal={goal} />
           <div className="play-tools">
             <Rules />
             <details className="play-detail">
