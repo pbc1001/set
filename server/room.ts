@@ -1,6 +1,6 @@
-import { MAX_ROOM_PLAYERS, boardView, createGame, isSet, replaceSet, type Game, type GameEvent, type Player, type RoomSession, type RoomState } from '../shared/game.ts';
+import { MAX_ROOM_PLAYERS, PLAYER_NAME_LIMIT, boardView, createGame, isSet, normalizePlayerName, playerName, replaceSet, type Game, type GameEvent, type Player, type RoomSession, type RoomState } from '../shared/game.ts';
 
-type Member = Player & { token: string };
+type Member = Player & { token: string; selected?: number[] };
 const RESULTS_DURATION_MS = 4_000;
 
 export interface Room {
@@ -11,10 +11,13 @@ export interface Room {
   event: GameEvent;
   returnToLobbyAt?: number;
   roundResult?: Player[];
+  departed?: Member[];
 }
 
+function publicPlayer({ id, score, name }: Member): Player { return name ? { id, score, name } : { id, score }; }
+
 function saveRoundResult(room: Room) {
-  room.roundResult = room.players.map(({ id, score }) => ({ id, score }))
+  room.roundResult = room.players.map(publicPlayer)
     .sort((a, b) => b.score - a.score || a.id - b.id);
 }
 
@@ -22,6 +25,8 @@ function clearGame(room: Room) {
   room.game = null;
   room.event = { added: 0 };
   delete room.returnToLobbyAt;
+  delete room.departed;
+  for (const player of room.players) delete player.selected;
   room.boardVersion++;
 }
 
@@ -39,16 +44,19 @@ export function snapshot(room: Room): RoomState {
   return {
     version: room.version,
     boardVersion: room.boardVersion,
-    players: room.players.map(({ id, score }) => ({ id, score })),
+    players: room.players.map(publicPlayer),
+    selections: room.players.flatMap(({ id, selected }) => selected?.length ? [{ player: id, cards: selected }] : []),
     play: game && boardView(game, event),
     roundResult: room.roundResult,
   };
 }
 
-function addPlayer(room: Room) {
-  let id = 1;
-  while (room.players.some(member => member.id === id)) id++;
-  const player = { id, token: crypto.randomUUID(), score: 0 };
+function addPlayer(room: Room, name?: string, previous?: Member) {
+  const occupied = new Set(room.players.map(member => member.id));
+  let id = previous?.id ?? 1;
+  if (occupied.has(id)) id = 1;
+  while (occupied.has(id)) id++;
+  const player: Member = { id, name, token: previous?.token ?? crypto.randomUUID(), score: previous?.score ?? 0 };
   room.players.push(player);
   return player;
 }
@@ -59,12 +67,13 @@ function session(code: string, room: Room, player?: Member): RoomSession {
     : { code, room: state, id: null, token: null };
 }
 
-export function createRoom(code: string) {
+export function createRoom(code: string, name?: string) {
   const room: Room = { version: 0, boardVersion: 0, players: [], game: null, event: { added: 0 } };
-  return { room, session: session(code, room, addPlayer(room)) };
+  return { room, session: session(code, room, addPlayer(room, name)) };
 }
 
-export const roomPath = /^\/api\/rooms\/([a-f0-9]{12})\/(join|start|reset|claim|leave|state|live)$/;
+export const nameError = `이름을 ${PLAYER_NAME_LIMIT}자 이내로 입력해 주세요.`;
+export const roomPath = /^\/api\/rooms\/([a-f0-9]{12})\/(join|start|reset|claim|select|leave|state|live)$/;
 export const missingRoom = { error: '이 코드의 방을 찾을 수 없어요.' };
 
 export function parseBody(text: string) {
@@ -83,11 +92,31 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
   });
 
   if (action === 'join') {
-    if (player) return { status: 200, body: session(code, room, player), changed: false };
-    if (room.game || room.players.length >= MAX_ROOM_PLAYERS || body.spectate === true) {
+    const name = normalizePlayerName(body.name);
+    if (body.name !== undefined && !name) return error(400, nameError);
+    const matchesName = (member: Member) => name === null || member.name?.toLowerCase() === name.toLowerCase();
+    const members = [...room.players, ...(room.departed ?? [])];
+    const previous = room.departed?.find(member => member.token === body.token && matchesName(member));
+    if (player && (matchesName(player) || !player.name)) {
+      let changed = false;
+      if (!player.name && name) {
+        if (members.some(member => member !== player && matchesName(member))) return error(409, '이 방에서 이미 사용 중인 이름이에요.');
+        player.name = name;
+        changed = true;
+      }
+      if (player.selected?.length) {
+        delete player.selected;
+        changed = true;
+      }
+      if (changed) room.version++;
+      return { status: 200, body: session(code, room, player), changed };
+    }
+    if ((!previous && room.game) || room.game?.finished || room.players.length >= MAX_ROOM_PLAYERS || body.spectate === true) {
       return { status: 200, body: session(code, room), changed: false };
     }
-    const guest = addPlayer(room);
+    if (name && !previous && members.some(matchesName)) return error(409, '이 방에서 이미 사용 중인 이름이에요.');
+    if (previous) room.departed = room.departed?.filter(member => member !== previous);
+    const guest = addPlayer(room, previous?.name ?? name ?? undefined, previous);
     room.version++;
     return { status: 200, body: session(code, room, guest), changed: true };
   }
@@ -95,6 +124,10 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
   if (action === 'leave') {
     if (player) {
       room.players.splice(room.players.indexOf(player), 1);
+      if (room.game && !room.game.finished) {
+        delete player.selected;
+        (room.departed ??= []).push(player);
+      }
       if (!room.players.length && room.game) clearGame(room);
       room.version++;
     }
@@ -108,10 +141,26 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
   }
   if (room.game?.finished) return error(409, '게임이 끝났어요. 잠시 후 대기실로 돌아가요.', true);
 
+  if (action === 'select') {
+    const { cards } = body;
+    if (!Array.isArray(cards) || cards.length > 2 || new Set(cards).size !== cards.length
+      || !cards.every(id => Number.isInteger(id) && room.game!.slots.some(card => card?.id === id))) {
+      return error(400, '보드에 있는 카드만 선택할 수 있어요.');
+    }
+    const current = player.selected ?? [];
+    const changed = current.length !== cards.length || current.some((id, index) => id !== cards[index]);
+    if (changed) {
+      player.selected = cards;
+      room.version++;
+    }
+    return { status: 200, body: { room: snapshot(room) }, changed };
+  }
+
   if (action === 'start' || action === 'reset') {
     if (player.id !== room.players[0].id) return error(403, '방장만 게임을 시작할 수 있어요.');
     Object.assign(room, createGame());
     delete room.roundResult;
+    delete room.departed;
     for (const member of room.players) member.score = 0;
   } else {
     const game = room.game!;
@@ -123,7 +172,7 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
     const [first, second, third] = positions.map(position => game.slots[position]);
     if (!first || !second || !third) return error(409, '카드가 바뀌었어요.', true);
     if (!isSet(first, second, third)) return error(422, 'SET이 아니에요. 다른 세 장을 골라 보세요.');
-    room.event = { added: replaceSet(game, positions), player: player.id, positions };
+    room.event = { added: replaceSet(game, positions), player: player.id, playerName: playerName(player), positions };
     player.score++;
     if (game.finished) {
       saveRoundResult(room);
@@ -131,6 +180,7 @@ export function applyRoomAction(room: Room, code: string, action: string, body: 
     }
   }
 
+  for (const member of room.players) delete member.selected;
   room.boardVersion++;
   room.version++;
   return { status: 200, body: { room: snapshot(room) }, changed: true };

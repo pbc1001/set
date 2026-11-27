@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
+import { normalizePlayerName } from '../shared/game.ts';
 import { practiceAction, practicePath } from '../server/practice.ts';
-import { applyRoomAction, createRoom, missingRoom, parseBody, returnToLobby, roomPath, snapshot, type Room as RoomData } from '../server/room.ts';
+import { applyRoomAction, createRoom, missingRoom, nameError, parseBody, returnToLobby, roomPath, snapshot, type Room as RoomData } from '../server/room.ts';
 
 interface Env {
   ROOMS: DurableObjectNamespace<Room>;
@@ -64,9 +65,13 @@ export class Room extends DurableObject<Env> {
     const [, , , code, action] = path.split('/');
 
     if (action === 'create') {
+      const body = await readBody(request);
+      if (!body) return json({ error: '요청을 읽을 수 없어요.' }, 400);
+      const name = normalizePlayerName(body.name);
+      if (body.name !== undefined && !name) return json({ error: nameError }, 400);
       const created = await this.ctx.storage.transaction(async tx => {
         if (await tx.get('room')) return null;
-        const created = createRoom(code);
+        const created = createRoom(code, name ?? undefined);
         await tx.put('room', created.room);
         return created.session;
       });
@@ -116,12 +121,13 @@ async function route(request: Request, env: Env) {
   if (practicePath.test(url.pathname)) return env.ROOMS.getByName('practice').fetch(request);
   if (url.pathname === '/api/rooms') {
     if (request.method !== 'POST') return unsupported();
-    if (!await readBody(request)) return json({ error: '요청을 읽을 수 없어요.' }, 400);
+    const body = await readBody(request);
+    if (!body) return json({ error: '요청을 읽을 수 없어요.' }, 400);
 
     for (let attempt = 0; attempt < 3; attempt++) {
       const code = Array.from(crypto.getRandomValues(new Uint8Array(6)), byte => byte.toString(16).padStart(2, '0')).join('');
       url.pathname = `/api/rooms/${code}/create`;
-      const result = await env.ROOMS.getByName(code).fetch(url, { method: 'POST' });
+      const result = await env.ROOMS.getByName(code).fetch(url, { method: 'POST', body: JSON.stringify(body) });
       if (result.status !== 409) return result;
     }
     return json({ error: '방 코드를 만들지 못했어요. 다시 시도해 주세요.' }, 503);

@@ -4,8 +4,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { WebSocket, WebSocketServer } from 'ws';
+import { normalizePlayerName } from '../shared/game.ts';
 import { practiceAction, practicePath, type PracticeStorage } from './practice.ts';
-import { applyRoomAction, createRoom, missingRoom, parseBody, returnToLobby, roomPath, snapshot, type Room } from './room.ts';
+import { applyRoomAction, createRoom, missingRoom, nameError, parseBody, returnToLobby, roomPath, snapshot, type Room } from './room.ts';
 
 const databasePath = process.env.SET_DB_PATH || '.data/set-lab.sqlite';
 if (databasePath !== ':memory:') mkdirSync(dirname(databasePath), { recursive: true });
@@ -110,9 +111,11 @@ const server = createServer(async (request, response) => {
     const body = await readBody(request);
     if (!body) return reply(response, 400, { error: '요청을 읽을 수 없어요.' });
     if (!route) {
+      const name = normalizePlayerName(body.name);
+      if (body.name !== undefined && !name) return reply(response, 400, { error: nameError });
       let code: string;
       do { code = randomBytes(6).toString('hex'); } while (readRoom(code));
-      const created = createRoom(code);
+      const created = createRoom(code, name ?? undefined);
       saveRoom(code, created.room);
       return reply(response, 201, created.session);
     }

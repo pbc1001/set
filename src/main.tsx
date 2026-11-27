@@ -1,12 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Global } from '@emotion/react';
-import { MAX_ROOM_PLAYERS, type Player } from '../shared/game';
+import { MAX_ROOM_PLAYERS, PLAYER_NAME_LIMIT, playerName, type Player } from '../shared/game';
 import { CardArt } from './CardArt';
 import { GameBoard } from './GameBoard';
 import { HallOfFame, Practice } from './Practice';
 import { Action, styles } from './styles';
-import { useRoom } from './room';
+import { activeName, preferredName, useRoom } from './room';
 
 const locationAtLoad = new URL(location.href);
 const invited = locationAtLoad.searchParams.get('room');
@@ -71,7 +71,7 @@ function Connection({ online }: { online: boolean }) {
 
 function Roster({ players, me, scores = false }: { players: Player[]; me: number | null; scores?: boolean }) {
   return <ul className={scores ? 'roster compact-roster' : 'roster'} aria-label={scores ? '플레이어 점수' : '참가자 목록'}>{players.map(player => <li key={player.id}>
-    <span>플레이어 {player.id}{player.id === me ? ' (나)' : ''}</span>
+    <span>{scores && <i className="player-color" data-player={player.id} aria-hidden="true" />}{playerName(player)}{player.id === me ? ' (나)' : ''}</span>
     <strong>{scores ? player.score : player.id === players[0].id ? '방장' : '참가자'}</strong>
   </li>)}</ul>;
 }
@@ -84,7 +84,7 @@ function RoundStandings({ players, title }: { players: Player[]; title: string }
       const tied = players.filter(other => other.score === player.score).length > 1;
       return <li key={player.id} data-winner={rank === 1}>
         <strong>{tied && '공동 '}{rank}위</strong>
-        <span>플레이어 {player.id}{rank === 1 && <small>승리</small>}</span>
+        <span>{playerName(player)}{rank === 1 && <small>승리</small>}</span>
         <b>{player.score} SET</b>
       </li>;
     })}</ol>
@@ -104,8 +104,9 @@ function Rules() {
 }
 
 function App() {
-  const { session, online, busy, error, enter, move } = useRoom();
+  const { session, online, busy, error, enter, move, select } = useRoom();
   const [code, setCode] = useState(invited ?? '');
+  const [name, setName] = useState(() => (invited && activeName(invited.toLowerCase())) || preferredName());
   const page = session ? session.room.play ? 'play' : 'lobby' : initialPage === 'lobby' ? 'join' : initialPage;
   const play = session?.room.play;
   const roundResult = session?.room.roundResult;
@@ -113,7 +114,12 @@ function App() {
   const isHost = Boolean(session && session.id === session.room.players[0]?.id);
   const leaveButton = <button className="quiet leave-button" type="button" disabled={busy} onClick={() => void move('leave')}>나가기</button>;
 
-  useEffect(() => { if (invited) void enter(invited); }, []);
+  useEffect(() => {
+    if (invited && /^\/(lobby|play)\/?$/.test(locationAtLoad.pathname)) {
+      const saved = activeName(invited.toLowerCase());
+      if (saved) void enter(saved, invited);
+    }
+  }, []);
   useEffect(() => {
     if (!session) return;
     history.replaceState(null, '', `/${page}?room=${session.code}`);
@@ -121,7 +127,17 @@ function App() {
   }, [page, session?.code]);
 
   const extra = play?.event.added ? ` 가능한 SET이 없어 카드 ${play.event.added}장을 더 열었어요.` : '';
-  const message = play?.event.player ? `플레이어 ${play.event.player}의 SET!${extra}` : extra.trim();
+  const finder = play?.event.playerName ?? (play?.event.player ? `플레이어 ${play.event.player}` : '');
+  const message = finder ? `${finder} 님이 SET을 찾았어요!${extra}` : extra.trim();
+  const remoteSelections = session?.room.selections?.flatMap(({ player, cards }) => {
+    if (player === session.id) return [];
+    const member = session.room.players.find(({ id }) => id === player);
+    return member ? [{ id: player, name: playerName(member), cards }] : [];
+  });
+  const nameField = <label className="room-field" htmlFor="room-name">이름
+    <input id="room-name" name="nickname" placeholder="게임에 표시할 이름" autoComplete="nickname" required value={name}
+      maxLength={PLAYER_NAME_LIMIT} onChange={event => setName(event.target.value)} />
+  </label>;
 
   return <>
     <Global styles={styles} />
@@ -139,13 +155,19 @@ function App() {
       {page === 'records' && <Panel title="명예의 전당"><HallOfFame /></Panel>}
       {page === 'create' && <Panel title="새 방 만들기">
         <p>대기실에서 초대 링크를 공유하고 게임을 시작하세요.</p>
-        <Action as="button" type="button" disabled={busy} onClick={() => void enter()}>{busy ? '방을 만드는 중…' : '방 만들기'}</Action>
+        <form className="join-form" onSubmit={event => { event.preventDefault(); void enter(name); }}>
+          {nameField}
+          <Action as="button" type="submit" disabled={busy}>{busy ? '방을 만드는 중…' : '방 만들기'}</Action>
+        </form>
         {error && <p className="notice" role="status">{error}</p>}
       </Panel>}
       {page === 'join' && <Panel title="코드로 입장">
         <p>친구에게 받은 12자리 방 코드를 입력하세요.</p>
-        <form className="join-form" onSubmit={event => { event.preventDefault(); void enter(code); }}>
-          <input aria-label="방 코드" placeholder="방 코드" required value={code} maxLength={12} autoComplete="off" onChange={event => setCode(event.target.value)} />
+        <form className="join-form" onSubmit={event => { event.preventDefault(); void enter(name, code); }}>
+          <label className="room-field" htmlFor="room-code">방 코드
+            <input id="room-code" placeholder="방 코드" required value={code} maxLength={12} autoComplete="off" onChange={event => setCode(event.target.value)} />
+          </label>
+          {nameField}
           <Action as="button" type="submit" disabled={busy}>{busy ? '입장 중…' : '입장'}</Action>
         </form>
         {error && <p className="notice" role="status">{error}</p>}
@@ -161,7 +183,7 @@ function App() {
         {spectator && <>
           <p className="notice" role="status">관전 중</p>
           {session.room.players.length < MAX_ROOM_PLAYERS &&
-            <Action as="button" type="button" disabled={busy} onClick={() => void enter(session.code, true)}>플레이어로 참가</Action>}
+            <Action as="button" type="button" disabled={busy} onClick={() => void enter(name, session.code, true)}>플레이어로 참가</Action>}
         </>}
         {!isHost && !spectator && <p className="notice" role="status">방장이 시작하면 자동으로 이동해요.</p>}
         {error && <p className="notice" role="status">{error}</p>}
@@ -169,6 +191,7 @@ function App() {
       {page === 'play' && !session && <Practice><Rules /></Practice>}
       {session && play && <div className="play-layout">
         <GameBoard key={session.code} play={play} version={session.room.boardVersion} pending={busy} spectator={spectator} message={error || message} returnsToLobby
+          finder={finder} remoteSelections={remoteSelections} select={positions => void select(positions.flatMap(position => play.slots[position]?.id ?? []))}
           standings={!!roundResult?.length && <RoundStandings players={roundResult} title="최종 순위" />}
           claim={positions => void move('claim', positions.flatMap(position => play.slots[position]?.id ?? []))} />
         <aside className="play-details" aria-label="게임 정보">

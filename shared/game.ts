@@ -1,6 +1,7 @@
 export const INITIAL_SIZE = 12;
 export const DECK_SIZE = 81;
 export const MAX_ROOM_PLAYERS = 4;
+export const PLAYER_NAME_LIMIT = 20;
 const attributes = ['count', 'color', 'shape', 'fill'] as const;
 const columns = ['QAZ', 'WSX', 'EDC', 'RFV', 'TGB', 'YHN', 'UJM'];
 
@@ -19,8 +20,9 @@ export interface Board {
 }
 
 export interface Game extends Board { deck: Card[] }
-export interface Player { id: number; score: number }
-export interface GameEvent { added: number; player?: number; positions?: number[]; newDeck?: boolean }
+export interface Player { id: number; score: number; name?: string }
+export interface GameEvent { added: number; player?: number; playerName?: string; positions?: number[]; newDeck?: boolean }
+export interface PlayerSelection { player: number; cards: number[] }
 export interface Play extends Board { cardsLeft: number; event: GameEvent }
 export interface RoomState {
   version: number;
@@ -28,11 +30,20 @@ export interface RoomState {
   players: Player[];
   play: Play | null;
   roundResult?: Player[];
+  selections?: PlayerSelection[];
 }
 export type RoomSession = { code: string; room: RoomState } & (
   { id: number; token: string } | { id: null; token: null }
 );
 export type Move = 'start' | 'reset' | 'claim' | 'leave';
+
+export function normalizePlayerName(name: unknown) {
+  if (typeof name !== 'string') return null;
+  const normalized = name.trim().normalize('NFC');
+  return normalized && normalized.length <= PLAYER_NAME_LIMIT && !/[\x00-\x1f\x7f]/.test(normalized) ? normalized : null;
+}
+
+export function playerName(player: Player) { return player.name ?? `플레이어 ${player.id}`; }
 
 export function boardView(game: Game, event: GameEvent): Play {
   const { slots, found, finished, deck } = game;

@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Move, RoomSession, RoomState } from '../shared/game';
+import { normalizePlayerName, PLAYER_NAME_LIMIT, type Move, type RoomSession, type RoomState } from '../shared/game';
 
 const apiOrigin = import.meta.env.VITE_API_ORIGIN || (import.meta.env.DEV ? location.origin : '');
 const offline = '게임 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.';
 const spectatorMark = 'spectator';
+const preferredNameKey = 'set-player-name';
+const activeNameKey = (code: string) => `set-room-name:${code}`;
+export const preferredName = () => localStorage.getItem(preferredNameKey) ?? '';
+export const activeName = (code: string) => sessionStorage.getItem(activeNameKey(code)) ?? '';
+
+interface SelectionRequest { code: string; token: string; boardVersion: number; cards: number[] }
 
 class RoomError extends Error {
   constructor(message: string, readonly room?: RoomState) { super(message); }
@@ -31,6 +37,8 @@ export function useRoom() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const moving = useRef(false);
+  const selecting = useRef(false);
+  const queuedSelection = useRef<SelectionRequest | undefined>(undefined);
   const code = session?.code;
 
   const update = useCallback((next: RoomState) => {
@@ -68,8 +76,13 @@ export function useRoom() {
     };
   }, [code, update]);
 
-  async function enter(input?: string, takeSeat = false) {
+  async function enter(value: string, input?: string, takeSeat = false) {
     if (moving.current) return;
+    const name = normalizePlayerName(value);
+    if (!name) {
+      setError(`이름을 ${PLAYER_NAME_LIMIT}자 이내로 입력해 주세요.`);
+      return;
+    }
     const code = input?.trim().toLowerCase();
     if (input !== undefined && !/^[a-f0-9]{12}$/.test(code ?? '')) {
       setError('영문 A–F와 숫자로 된 12자리 방 코드를 입력하세요.');
@@ -79,10 +92,16 @@ export function useRoom() {
     setBusy(true);
     setError('');
     try {
-      const saved = code && sessionStorage.getItem(`set-room:${code}`);
-      const token = saved === spectatorMark ? null : saved;
+      const lastName = code && activeName(code);
+      const saved = code && (!lastName || lastName.toLowerCase() === name.toLowerCase())
+        ? sessionStorage.getItem(`set-room:${code}`) : null;
+      const key = (roomCode: string) => `set-player:${roomCode}:${name.toLowerCase()}`;
+      const token = (code && localStorage.getItem(key(code))) || (saved === spectatorMark ? null : saved);
       const spectate = saved === spectatorMark && !takeSeat;
-      const next = await post<RoomSession>(code ? `/api/rooms/${code}/join` : '/api/rooms', { token, spectate });
+      const next = await post<RoomSession>(code ? `/api/rooms/${code}/join` : '/api/rooms', { token, name, spectate });
+      localStorage.setItem(preferredNameKey, name);
+      if (next.token) localStorage.setItem(key(next.code), next.token);
+      sessionStorage.setItem(activeNameKey(next.code), name);
       sessionStorage.setItem(`set-room:${next.code}`, next.token ?? spectatorMark);
       setSession(current => current?.code === next.code && current.room.version > next.room.version
         ? { ...next, room: current.room } : next);
@@ -91,6 +110,27 @@ export function useRoom() {
     } finally {
       moving.current = false;
       setBusy(false);
+    }
+  }
+
+  async function select(cards: number[]) {
+    if (!session?.token) return;
+    queuedSelection.current = { code: session.code, token: session.token, boardVersion: session.room.boardVersion, cards };
+    if (selecting.current) return;
+    selecting.current = true;
+    try {
+      while (queuedSelection.current) {
+        const { code, ...selection } = queuedSelection.current;
+        queuedSelection.current = undefined;
+        try {
+          const { room } = await post<{ room: RoomState }>(`/api/rooms/${code}/select`, selection);
+          update(room);
+        } catch (error) {
+          if (error instanceof RoomError && error.room) update(error.room);
+        }
+      }
+    } finally {
+      selecting.current = false;
     }
   }
 
@@ -108,6 +148,7 @@ export function useRoom() {
       }
       if (action === 'leave') {
         sessionStorage.removeItem(`set-room:${session.code}`);
+        sessionStorage.removeItem(activeNameKey(session.code));
         location.assign('/');
       }
     } catch (error) {
@@ -119,5 +160,5 @@ export function useRoom() {
     }
   }
 
-  return { session, online, busy, error, enter, move };
+  return { session, online, busy, error, enter, move, select };
 }

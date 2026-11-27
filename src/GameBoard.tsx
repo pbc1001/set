@@ -10,11 +10,14 @@ interface Props {
   practice?: boolean;
   standings?: ReactNode;
   message: string;
+  finder?: string;
+  remoteSelections?: { id: number; name: string; cards: number[] }[];
+  select?: (positions: number[]) => void;
   returnsToLobby: boolean;
   claim: (positions: number[]) => void;
 }
 
-export function GameBoard({ play, version, pending, spectator, practice, standings, message, returnsToLobby, claim }: Props) {
+export function GameBoard({ play, version, pending, spectator, practice, standings, message, finder, remoteSelections, select, returnsToLobby, claim }: Props) {
   const [display, setDisplay] = useState(play);
   const [selected, setSelected] = useState<number[]>([]);
   const [burst, setBurst] = useState<number[]>([]);
@@ -58,9 +61,17 @@ export function GameBoard({ play, version, pending, spectator, practice, standin
     if (locked || !display.slots[position]) return;
     const next = selected.includes(position) ? selected.filter(slot => slot !== position) : [...selected, position];
     if (next.length === 3) {
-      setSelected([]);
+      clearSelection();
       claim(next);
-    } else setSelected(next);
+    } else {
+      setSelected(next);
+      select?.(next);
+    }
+  }
+
+  function clearSelection() {
+    setSelected([]);
+    select?.([]);
   }
 
   useEffect(() => {
@@ -68,7 +79,7 @@ export function GameBoard({ play, version, pending, spectator, practice, standin
     const shortcut = (event: KeyboardEvent) => {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.target instanceof HTMLInputElement) return;
       if (event.key === 'Escape') {
-        setSelected([]);
+        clearSelection();
         return;
       }
       const key = /^Key[A-Z]$/.test(event.code) ? event.code.slice(3) : event.key.toUpperCase();
@@ -101,24 +112,32 @@ export function GameBoard({ play, version, pending, spectator, practice, standin
           if (!card) return <div key={position} aria-hidden="true" />;
           const key = keyAt(position);
           const order = burst.indexOf(position);
+          const others = remoteSelections?.filter(player => player.cards.includes(card.id)) ?? [];
+          const description = `${spectator ? '' : `${key}, `}${describeCard(card)}`;
           return <button key={card.id} type="button" className="playing-card" data-extra={position >= INITIAL_SIZE}
             data-burst={order >= 0} tabIndex={spectator ? -1 : undefined} aria-keyshortcuts={spectator ? undefined : key}
             aria-pressed={spectator ? undefined : selected.includes(position)} aria-disabled={locked}
-            aria-label={spectator ? describeCard(card) : `${key}, ${describeCard(card)}`} onClick={() => choose(position)}
+            aria-label={others.length ? `${description}, ${others.map(player => player.name).join(', ')} 선택 중` : description} onClick={() => choose(position)}
             style={{ '--delay': `${order * 45}ms`, gridColumn: index % columns + 1, gridRow: Math.floor(index / columns) + 1 } as CSSProperties}>
             {!spectator && <kbd aria-hidden="true">{key}</kbd>}<CardArt card={card} />
+            {!!others.length && <span className="card-selectors" aria-hidden="true">
+              {others.map(player => <span key={player.id} data-player={player.id} title={player.name}>{player.name}</span>)}
+            </span>}
           </button>;
         })}
       </div>}
-      {celebrating && <div className="celebration" aria-hidden="true"><strong>SET!</strong>{Array.from({ length: 6 }, (_, index) => <i key={index} />)}</div>}
+      {celebrating && <div className="celebration" aria-hidden="true">
+        <div className="celebration-label"><strong>SET!</strong>{finder && <span>{finder}</span>}</div>
+        {Array.from({ length: 6 }, (_, index) => <i key={index} />)}
+      </div>}
     </div>}
     {display.finished ? <div className="game-result" role="status">
       <strong>게임 종료</strong>
-      <span>SET {display.found}개를 찾았어요. {hasCards ? '남은 카드에 가능한 SET이 없어요.' : '모든 카드를 사용했어요.'}{returnsToLobby && ' 잠시 후 대기실로 돌아가요.'}</span>
+      <span>{finder && `${finder} 님이 마지막 SET을 찾았어요. `}총 SET {display.found}개. {hasCards ? '남은 카드에 가능한 SET이 없어요.' : '모든 카드를 사용했어요.'}{returnsToLobby && ' 잠시 후 대기실로 돌아가요.'}</span>
       {standings}
     </div> : <div className="table-bar table-foot">
       <p role="status">{selected.length ? `카드 ${3 - selected.length}장을 더 선택하세요.` : message}</p>
-      {!spectator && <button type="button" className="text-button" disabled={!selected.length} onClick={() => setSelected([])}><kbd>ESC</kbd> 선택 해제</button>}
+      {!spectator && <button type="button" className="text-button" disabled={!selected.length} onClick={clearSelection}><kbd>ESC</kbd> 선택 해제</button>}
     </div>}
   </section>;
 }
